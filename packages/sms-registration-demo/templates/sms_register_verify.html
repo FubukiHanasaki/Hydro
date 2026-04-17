@@ -1,0 +1,50 @@
+{% extends "layout/immersive.html" %}
+{% block content %}
+<div class="row"><div class="columns">
+  <div class="immersive--content immersive--center">
+    <h1>{{ _('Verify Phone') }}</h1>
+    <p>{{ _('A verification code has been sent to') }} <strong>{{ maskedPhone }}</strong>. {{ _('Please enter the code and set your password.') }}</p>
+    <form method="POST">
+      <input type="hidden" name="phone" value="{{ phone }}">
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Phone Number') }}
+          <input type="text" value="{{ phone }}" disabled>
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Username') }}
+          <input type="text" value="{{ uname }}" disabled>
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Verification Code') }}
+          <input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" autofocus>
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Password') }}
+          <input name="password" type="password" autocomplete="new-password">
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Repeat Password') }}
+          <input name="verifyPassword" type="password" autocomplete="new-password">
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <div class="text-center">
+          <input type="submit" value="{{ _('Create Account') }}" class="inverse expanded rounded primary button">
+        </div>
+      </div></div>
+    </form>
+    <div class="text-center supplementary inverse">
+      <a href="{{ url('sms_register') }}">{{ _('Resend verification code') }}</a>
+    </div>
+  </div>
+</div></div>
+{% endblock %}

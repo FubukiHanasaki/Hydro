@@ -1,0 +1,8 @@
+{
+    "name": "@hydrooj/sms-registration-demo",
+    "version": "0.0.1",
+    "main": "index.ts",
+    "repository": "https://github.com/hydro-dev/Hydro",
+    "license": "AGPL-3.0-or-later",
+    "preferUnplugged": true
+}
