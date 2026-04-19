@@ -1,4 +1,5 @@
 import $ from 'jquery';
+import responsiveCutoff from 'vj/breakpoints.json';
 import Notification from 'vj/components/notification';
 import selectUser from 'vj/components/selectUser';
 import { AutoloadPage } from 'vj/misc/Page';
@@ -30,7 +31,7 @@ let $menu;
 
 function handleNavbar() {
   let fromHide = false;
-  if ($(document).width() <= 600) {
+  if ($(document).width() <= responsiveCutoff.mobile) {
     $menu.children().each(function () {
       const $ele = $(this);
       $ele.addClass('nav__list-item').removeClass('menu__item');
@@ -94,11 +95,16 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
   const PADDING = 200;
   const TOLERANCE = 70;
 
+  function isMobileLayout() {
+    return $(document).width() <= responsiveCutoff.mobile;
+  }
+
   function setTranslateX(x) {
     panel.style.transform = x ? `translateX(${x}px)` : '';
   }
 
   function open() {
+    if (!isMobileLayout()) return;
     isOpen = true;
     $('html').addClass('slideout-open');
     setTranslateX(-PADDING);
@@ -108,6 +114,9 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
 
   function close() {
     isOpen = false;
+    isSwiping = false;
+    isScrolling = false;
+    panel.style.transition = '';
     setTranslateX(0);
     $hamburger.removeClass('is-active');
     $slideoutOverlay.hide();
@@ -116,21 +125,35 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
 
   // Touch swipe support
   let touchStartX = 0;
+  let touchStartY = 0;
   let touchCurrentX = 0;
   let isSwiping = false;
+  let isScrolling = false;
 
   panel.addEventListener('touchstart', (e) => {
-    if (e.target.closest('[data-slideout-ignore]')) return;
+    if (!isMobileLayout() || e.target.closest('[data-slideout-ignore]')) return;
     touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
     touchCurrentX = touchStartX;
     isSwiping = false;
+    isScrolling = false;
   }, { passive: true });
 
   panel.addEventListener('touchmove', (e) => {
+    if (!isMobileLayout()) return;
     touchCurrentX = e.touches[0].clientX;
     const dx = touchStartX - touchCurrentX;
     if (!isSwiping) {
-      if (Math.abs(dx) < 10) return;
+      if (isScrolling) return;
+      const dy = touchStartY - e.touches[0].clientY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (absDx < 10 && absDy < 10) return;
+      // Lock to scroll if vertical movement dominates
+      if (absDy > absDx) {
+        isScrolling = true;
+        return;
+      }
       isSwiping = true;
       if (!isOpen) $slideoutOverlay.show();
       $('html').addClass('slideout-open');
@@ -142,7 +165,7 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
   }, { passive: true });
 
   panel.addEventListener('touchend', () => {
-    if (!isSwiping) return;
+    if (!isMobileLayout() || !isSwiping) return;
     panel.style.transition = '';
     const dx = touchStartX - touchCurrentX;
     if (isOpen) {
@@ -157,7 +180,10 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
 
   $slideoutOverlay.on('click', close);
   $('.header__hamburger').on('click', () => (isOpen ? close() : open()));
-  $(window).on('resize', handleNavbar);
+  $(window).on('resize', () => {
+    handleNavbar();
+    if (!isMobileLayout()) close();
+  });
   setInterval(handleNavbar, 3000);
 }, () => {
   $trigger = $(tpl`
