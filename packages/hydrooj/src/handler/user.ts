@@ -14,6 +14,9 @@ import {
 import { TokenDoc, Udoc, User } from '../interface';
 import avatar from '../lib/avatar';
 import { sendMail } from '../lib/mail';
+import {
+    isAliyunSmsEnabled, maskPhone, normalizePhone, sendAliyunSmsCode, verifyAliyunSmsCode,
+} from '../lib/sms';
 import { verifyTFA } from '../lib/verifyTFA';
 import BlackListModel from '../model/blacklist';
 import { PERM, PRIV, STATUS } from '../model/builtin';
@@ -53,7 +56,20 @@ class UserLoginHandler extends Handler {
         this.response.template = 'user_login.html';
     }
 
-    @param('uname', Types.Username)
+    async getUserByLogin(domainId: string, login: string) {
+        let udoc = await user.getByEmail(domainId, login);
+        udoc ||= await user.getByUname(domainId, login);
+        if (!udoc) {
+            try {
+                const phone = normalizePhone(login);
+                const uid = await this.ctx.oauth.get('phone', phone);
+                if (uid) udoc = await user.getById(domainId, uid);
+            } catch (e) { }
+        }
+        return udoc;
+    }
+
+    @param('uname', Types.String)
     @param('password', Types.Password)
     @param('rememberme', Types.Boolean)
     @param('redirect', Types.String, true)
@@ -63,8 +79,9 @@ class UserLoginHandler extends Handler {
         domainId: string, uname: string, password: string, rememberme = false, redirect = '',
         tfa = '', authnChallenge = '',
     ) {
-        let udoc = await user.getByEmail(domainId, uname);
-        udoc ||= await user.getByUname(domainId, uname);
+        uname = uname.trim();
+        if (!uname) throw new ValidationError('uname');
+        const udoc = await this.getUserByLogin(domainId, uname);
         if (!udoc) throw new UserNotFoundError(uname);
         if (system.get('system.contestmode') && !udoc.hasPriv(PRIV.PRIV_EDIT_SYSTEM)) {
             if (udoc._loginip && udoc._loginip !== this.request.ip) throw new ValidationError('ip');
@@ -236,10 +253,13 @@ export class UserRegisterHandler extends Handler {
 
     async get() {
         this.response.template = 'user_register.html';
+        this.response.body = {
+            mailEnabled: system.get('smtp.verify') && system.get('smtp.user'),
+            phoneEnabled: isAliyunSmsEnabled(),
+        };
     }
 
-    @post('mail', Types.Email)
-    async post({ }, mail: string) {
+    async sendMailRegister(mail: string) {
         if (await user.getByEmail('system', mail)) throw new UserAlreadyExistError(mail);
         const mailDomain = mail.split('@')[1];
         if (await BlackListModel.get(`mail::${mailDomain}`)) throw new BlacklistedError(mailDomain);
@@ -273,6 +293,80 @@ export class UserRegisterHandler extends Handler {
             this.response.template = 'user_register_mail_sent.html';
             this.response.body = { mail };
         } else this.response.redirect = this.url('user_register_with_code', { code: t[0] });
+    }
+
+    async sendSmsRegister(phone: string, smsCode = '') {
+        if (!isAliyunSmsEnabled()) throw new SystemError('SMS registration is not enabled');
+        phone = normalizePhone(phone);
+        if (await this.ctx.oauth.get('phone', phone)) throw new UserAlreadyExistError(maskPhone(phone));
+        const expireSeconds = system.get('sms.aliyun.expireSeconds') || 300;
+        if (!smsCode) {
+            await Promise.all([
+                this.limitRate('send_sms', 60, 1, phone),
+                this.limitRate('send_sms', 3600, 30),
+                oplog.log(this, 'user.register.sms', {}),
+            ]);
+            const [tid] = await token.add(
+                token.TYPE_SMS_VERIFICATION,
+                expireSeconds,
+                { phone, purpose: 'register' },
+            );
+            try {
+                await sendAliyunSmsCode(phone, tid);
+            } catch (e) {
+                await token.del(tid, token.TYPE_SMS_VERIFICATION);
+                throw e;
+            }
+            this.response.template = 'user_register.html';
+            this.response.body = {
+                mailEnabled: system.get('smtp.verify') && system.get('smtp.user'),
+                phoneEnabled: true,
+                phone,
+                phoneSent: true,
+                expireSeconds,
+            };
+            return;
+        }
+        await this.limitRate('verify_sms', 60, 5, phone);
+        const [doc] = await token.getMulti(token.TYPE_SMS_VERIFICATION, { phone, purpose: 'register' })
+            .sort({ updateAt: -1 })
+            .limit(1)
+            .toArray();
+        if (!doc) {
+            throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
+        }
+        const verified = await verifyAliyunSmsCode(phone, smsCode.trim(), doc._id);
+        if (!verified) {
+            throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
+        }
+        await token.del(doc._id, token.TYPE_SMS_VERIFICATION);
+        const [registrationCode] = await token.add(
+            token.TYPE_REGISTRATION,
+            system.get('session.unsaved_expire_seconds'),
+            {
+                redirect: this.domain.registerRedirect,
+                identity: {
+                    provider: 'phone',
+                    platform: 'phone',
+                    id: phone,
+                },
+                set: {
+                    phone,
+                    phoneVerified: true,
+                },
+            },
+        );
+        this.response.redirect = this.url('user_register_with_code', { code: registrationCode });
+    }
+
+    @post('mail', Types.String, true)
+    @post('phone', Types.String, true)
+    @post('smsCode', Types.String, true)
+    @post('mode', Types.Range(['mail', 'phone']), true)
+    async post({ }, mail = '', phone = '', smsCode = '', mode = 'mail') {
+        if (mode === 'phone' || phone) return await this.sendSmsRegister(phone, smsCode);
+        if (!Types.Email[1](mail)) throw new ValidationError('mail');
+        return await this.sendMailRegister(Types.Email[0](mail));
     }
 }
 
@@ -309,13 +403,16 @@ class UserRegisterWithCodeHandler extends Handler {
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
         if (password !== verify) throw new VerifyPasswordError();
         const randomEmail = `${randomstring(12)}@invalid.local`; // some random email to remove in the future
-        const uid = await user.create(this.tdoc.mail || randomEmail, uname, password, undefined, this.request.ip);
+        const mail = this.tdoc.mail || randomEmail;
+        const uid = await user.create(mail, uname, password, undefined, this.request.ip);
         await token.del(code, token.TYPE_REGISTRATION);
-        const [id, mailDomain] = this.tdoc.mail.split('@');
         const $set: any = this.tdoc.set || {};
-        if (mailDomain === 'qq.com' && !Number.isNaN(+id)) {
-            $set.avatar = `qq:${id}`;
-            $set.qq = `${id}`;
+        if (this.tdoc.mail) {
+            const [id, mailDomain] = this.tdoc.mail.split('@');
+            if (mailDomain === 'qq.com' && !Number.isNaN(+id)) {
+                $set.avatar = `qq:${id}`;
+                $set.qq = `${id}`;
+            }
         }
         if (this.session.viewLang) $set.viewLang = this.session.viewLang;
         if (Object.keys($set).length) await user.setById(uid, $set);
@@ -331,10 +428,13 @@ class UserLostPassHandler extends Handler {
 
     async get() {
         this.response.template = 'user_lostpass.html';
+        this.response.body = {
+            mailEnabled: system.get('smtp.user'),
+            phoneEnabled: isAliyunSmsEnabled(),
+        };
     }
 
-    @param('mail', Types.Email)
-    async post(domainId: string, mail: string) {
+    async sendMailLostPass(mail: string) {
         if (!system.get('smtp.user')) throw new SystemError('Cannot send mail');
         const udoc = await user.getByEmail('system', mail);
         if (!udoc) throw new UserNotFoundError(mail);
@@ -358,6 +458,66 @@ class UserLostPassHandler extends Handler {
         });
         await sendMail(mail, 'Lost Password', 'user_lostpass_mail', m.toString());
         this.response.template = 'user_lostpass_mail_sent.html';
+    }
+
+    async sendPhoneLostPass(phone: string, smsCode = '') {
+        if (!isAliyunSmsEnabled()) throw new SystemError('SMS registration is not enabled');
+        phone = normalizePhone(phone);
+        const uid = await this.ctx.oauth.get('phone', phone);
+        if (!uid) throw new UserNotFoundError(maskPhone(phone));
+        const expireSeconds = system.get('sms.aliyun.expireSeconds') || 300;
+        if (!smsCode) {
+            await Promise.all([
+                this.limitRate('send_sms_lostpass', 60, 1, phone),
+                this.limitRate('send_sms_lostpass', 3600, 30),
+                oplog.log(this, 'user.lostpass.sms', {}),
+            ]);
+            const [tid] = await token.add(
+                token.TYPE_SMS_VERIFICATION,
+                expireSeconds,
+                { phone, uid, purpose: 'lostpass' },
+            );
+            try {
+                await sendAliyunSmsCode(phone, tid);
+            } catch (e) {
+                await token.del(tid, token.TYPE_SMS_VERIFICATION);
+                throw e;
+            }
+            this.response.template = 'user_lostpass.html';
+            this.response.body = {
+                mailEnabled: system.get('smtp.user'),
+                phoneEnabled: true,
+                phone,
+                phoneSent: true,
+                expireSeconds,
+            };
+            return;
+        }
+        await this.limitRate('verify_sms_lostpass', 60, 5, phone);
+        const [doc] = await token.getMulti(token.TYPE_SMS_VERIFICATION, { phone, purpose: 'lostpass' })
+            .sort({ updateAt: -1 })
+            .limit(1)
+            .toArray();
+        if (!doc) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
+        const verified = await verifyAliyunSmsCode(phone, smsCode.trim(), doc._id);
+        if (!verified) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
+        await token.del(doc._id, token.TYPE_SMS_VERIFICATION);
+        const [tid] = await token.add(
+            token.TYPE_LOSTPASS,
+            system.get('session.unsaved_expire_seconds'),
+            { uid: doc.uid },
+        );
+        this.response.redirect = this.url('user_lostpass_with_code', { code: tid });
+    }
+
+    @param('mail', Types.String, true)
+    @param('phone', Types.String, true)
+    @param('smsCode', Types.String, true)
+    @param('mode', Types.Range(['mail', 'phone']), true)
+    async post(domainId: string, mail = '', phone = '', smsCode = '', mode = 'mail') {
+        if (mode === 'phone' || phone) return await this.sendPhoneLostPass(phone, smsCode);
+        if (!Types.Email[1](mail)) throw new ValidationError('mail');
+        return await this.sendMailLostPass(Types.Email[0](mail));
     }
 }
 
@@ -631,6 +791,17 @@ export async function apply(ctx: Context) {
     ctx.oauth.provide('mail', {
         text: 'Mail',
         name: 'mail',
+        hidden: true,
+        async get() {
+            throw new NotFoundError();
+        },
+        async callback() {
+            throw new NotFoundError();
+        },
+    });
+    ctx.oauth.provide('phone', {
+        text: 'Phone',
+        name: 'phone',
         hidden: true,
         async get() {
             throw new NotFoundError();

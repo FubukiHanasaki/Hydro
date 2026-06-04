@@ -101,6 +101,7 @@ setting_preference: Preference
 setting_privacy: Privacy
 setting_server: Server Settings
 setting_session: Session Settings
+setting_sms: SMS Settings
 setting_smtp: SMTP Settings
 setting_usage: Usage Preference
 timeago_locale: en_US

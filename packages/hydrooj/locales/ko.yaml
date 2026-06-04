@@ -625,6 +625,7 @@ setting_info: 정보 설정
 setting_privacy: 개인정보 설정
 setting_server: 서버 설정
 setting_session: 세션 설정
+setting_sms: SMS 설정
 setting_smtp: SMTP 설정
 setting_storage: 설정 저장
 setting_usage: 언어 설정

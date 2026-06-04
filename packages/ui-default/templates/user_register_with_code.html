@@ -5,8 +5,8 @@
   <form method="POST">
     <div>
       <label class="inverse material textbox">
-        {{ _('Email') }}
-        <input type="text" value="{{ mail }}" disabled>
+        {% if identity.provider == 'phone' %}{{ _('Phone') }}{% else %}{{ _('Email') }}{% endif %}
+        <input type="text" value="{{ identity.id if identity.provider == 'phone' else mail }}" disabled>
       </label>
     </div>
     <div>

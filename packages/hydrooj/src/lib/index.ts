@@ -1,5 +1,6 @@
 import './i18n';
 import './mail';
+import './sms';
 import './hash.hydro';
 import './ui';
 import './testdataConfig';
