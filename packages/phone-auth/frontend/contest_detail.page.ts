@@ -1,6 +1,7 @@
 import {
-  $, ActionDialog, NamedPage, Notification, i18n, request,
+  $, ActionDialog, NamedPage, Notification, addPage, i18n, request,
 } from '@hydrooj/ui-default';
+import { sendSmsCode, showSmsSentMessage, startSmsCountdown } from './sms';
 
 const page = new NamedPage('contest_detail', () => {
   const $marker = $('.phone-auth-contest-profile[data-required="1"]');
@@ -16,16 +17,26 @@ const page = new NamedPage('contest_detail', () => {
     width: '520px',
     onDispatch(action) {
       if (action !== 'ok') return true;
-      const missing = dialog.$dom.find('input[required], select[required]').toArray()
-        .find((element: HTMLInputElement | HTMLSelectElement) => !$(element).val());
-      if (missing) {
-        Notification.error(i18n('Please fill in all required fields.'));
-        $(missing).focus();
-        return false;
-      }
-      return true;
+      return validateRequiredFields();
     },
   });
+
+  function findMissingRequired(includeSmsCode = true) {
+    return dialog.$dom.find('input[required], select[required]').toArray()
+      .find((element: HTMLInputElement | HTMLSelectElement) => {
+        if (!includeSmsCode && $(element).attr('name') === 'smsCode') return false;
+        const value = $(element).val();
+        return Array.isArray(value) ? !value.length : !`${value || ''}`.trim();
+      });
+  }
+
+  function validateRequiredFields(includeSmsCode = true) {
+    const missing = findMissingRequired(includeSmsCode);
+    if (!missing) return true;
+    Notification.error(i18n('Please fill in all required fields.'));
+    $(missing).focus();
+    return false;
+  }
 
   const collectProfile = () => {
     const data: Record<string, any> = { operation: 'save' };
@@ -38,18 +49,21 @@ const page = new NamedPage('contest_detail', () => {
 
   dialog.$dom.on('click', '[data-phone-auth-send-sms]', async (ev) => {
     ev.preventDefault();
+    if (!validateRequiredFields(false)) return;
     const phone = dialog.$dom.find('[name="phone"]').val();
     if (!phone) {
       Notification.error(i18n('Please fill in phone number.'));
       return;
     }
-    try {
-      await request.post(profileUrl, { operation: 'send_sms', phone });
-      Notification.success(i18n('SMS verification code has been sent.'));
-    } catch (error) {
-      Notification.error(error.message || error);
-    }
+    const $button = $(ev.currentTarget);
+    await sendSmsCode($button, () => request.post(profileUrl, { operation: 'send_sms', phone }), (expireSeconds) => {
+      showSmsSentMessage(dialog.$dom, expireSeconds);
+      $button.data('phoneAuthLabel', i18n('Resend SMS Code'));
+      startSmsCountdown($button);
+      dialog.$dom.find('[name="smsCode"]').val('').trigger('focus');
+    });
   });
+  dialog.$dom.find('[data-phone-auth-send-sms]').prop('disabled', false);
 
   async function completeProfile() {
     while (!isComplete()) {
@@ -90,5 +104,7 @@ const page = new NamedPage('contest_detail', () => {
     if (await completeProfile()) (this as HTMLFormElement).submit();
   });
 });
+
+addPage(page);
 
 export default page;

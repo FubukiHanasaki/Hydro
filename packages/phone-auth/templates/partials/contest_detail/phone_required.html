@@ -37,13 +37,14 @@
           <input name="phone" type="text" value="{{ phoneAuth.phone or '' }}" required>
         </label>
       </div></div>
+      <blockquote class="success" data-phone-auth-sms-message style="display:none;"></blockquote>
       <div class="row"><div class="medium-7 columns">
         <label class="material textbox">
           {{ _('SMS Code') }}
           <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" required>
         </label>
       </div><div class="medium-5 columns">
-        <button type="button" class="rounded button" data-phone-auth-send-sms>{{ _('Send SMS Code') }}</button>
+        <button type="button" class="rounded button" data-phone-auth-send-sms disabled>{{ _('Send SMS Code') }}</button>
       </div></div>
       {% endif %}
     </div>
