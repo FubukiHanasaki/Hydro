@@ -1,0 +1,60 @@
+{% set profileData = profileData or profile or {} %}
+{% set textboxClass = 'inverse material textbox' if profileInverse else 'material textbox' %}
+{% set disabledAttr = 'disabled' if profileDisabled else '' %}
+{% if profileDisabled %}
+<input type="hidden" name="realName" value="{{ profileData.realName or '' }}">
+<input type="hidden" name="birthYear" value="{{ profileData.birthYear or '' }}">
+<input type="hidden" name="birthMonth" value="{{ profileData.birthMonth or '' }}">
+<input type="hidden" name="school" value="{{ profileData.school or '' }}">
+<input type="hidden" name="grade" value="{{ profileData.grade or '' }}">
+{% endif %}
+<div class="row"><div class="columns">
+  <label class="{{ textboxClass }}">
+    {{ _('Real Name') }}
+    <input name="realName" type="text" value="{{ profileData.realName or '' }}" required {{ disabledAttr }}>
+  </label>
+  {% if profileHelp %}
+  <p class="help-text{% if profileInverse %} inverse{% endif %}">{{ _('Real-name profile is only visible to you and site administrators.') }}</p>
+  {% endif %}
+</div></div>
+<div class="row">
+  <div class="medium-6 columns">
+    <label class="{{ textboxClass }}">
+      {{ _('Birth Year') }}
+      <select name="birthYear" class="select" required {{ disabledAttr }}>
+        <option value="">{{ _('Select') }}</option>
+        {% for key, label in birthYears %}
+        <option value="{{ key }}"{% if profileData.birthYear == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="medium-6 columns">
+    <label class="{{ textboxClass }}">
+      {{ _('Birth Month') }}
+      <select name="birthMonth" class="select" required {{ disabledAttr }}>
+        <option value="">{{ _('Select') }}</option>
+        {% for key, label in birthMonths %}
+        <option value="{{ key }}"{% if profileData.birthMonth == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+</div>
+<div class="row"><div class="columns">
+  <label class="{{ textboxClass }}">
+    {{ _('School') }}
+    <input name="school" type="text" value="{{ profileData.school or '' }}" required {{ disabledAttr }}>
+  </label>
+</div></div>
+<div class="row"><div class="columns">
+  <label class="{{ textboxClass }}">
+    {{ _('Grade') }}
+    <select name="grade" class="select" required {{ disabledAttr }}>
+      <option value="">{{ _('Select') }}</option>
+      {% for key, label in gradeOptions %}
+      <option value="{{ key }}"{% if profileData.grade == key %} selected{% endif %}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</div></div>

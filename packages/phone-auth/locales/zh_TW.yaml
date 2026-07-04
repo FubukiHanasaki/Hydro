@@ -1,0 +1,53 @@
+Email Registration: 信箱註冊
+Phone Registration: 手機號註冊
+Phone: 手機號
+Send SMS Code: 傳送簡訊驗證碼
+SMS Code: 簡訊驗證碼
+SMS verification code has been sent.: 簡訊驗證碼已傳送。
+Valid for {0} seconds.: '{0} 秒內有效。'
+Verify Phone: 驗證手機號
+Username / Phone: 使用者名稱 / 手機號
+setting_sms: 簡訊設定
+Real Name: 真實姓名
+Real Name is only visible to you and site administrators.: 真實姓名僅自己和站點管理員可見。
+Verify Phone Number: 驗證手機號
+Please verify your phone number to keep your account reachable.: 請驗證手機號，以便帳號保持可聯絡。
+'Your current verified phone: {0}': '目前已驗證手機號：{0}'
+Skip for now: 暫時略過
+Phone Account: 手機帳號
+Not linked: 未綁定
+Change Phone: 更換手機號
+Link Phone: 綁定手機號
+Account Info: 帳號資訊
+Require Verified Phone: 要求已驗證手機號
+Require participants to verify phone before attending: 要求參賽者報名前驗證手機號
+This contest requires a verified phone number.: 此比賽要求驗證手機號後才能報名。
+Real-name profile is only visible to you and site administrators.: 實名資料僅自己和站點管理員可見。
+Birth Year: 出生年份
+Birth Month: 出生月份
+Birth Date: 出生年月
+School: 學校
+Grade: 年級
+Select: 請選擇
+Primary Grade 1: 小學一年級
+Primary Grade 2: 小學二年級
+Primary Grade 3: 小學三年級
+Primary Grade 4: 小學四年級
+Primary Grade 5: 小學五年級
+Primary Grade 6: 小學六年級
+Junior Grade 1: 初一
+Junior Grade 2: 初二
+Junior Grade 3: 初三
+Senior Grade 1: 高一
+Senior Grade 2: 高二
+Senior Grade 3: 高三
+Other: 其他
+Real-name Profile: 實名資料
+Require Real-name Profile: 要求實名資料
+Require verified phone and real-name profile before attending: 報名前要求已驗證手機號和完整實名資料
+This contest requires verified phone and real-name profile.: 此比賽要求已驗證手機號和完整實名資料。
+Please complete the required profile before attending.: 請先補齊報名所需資料。
+Complete Required Profile: 補齊報名資料
+Please fill in all required fields.: 請填寫所有必填項。
+Please fill in phone number.: 請填寫手機號。
+Profile updated.: 資料已更新。

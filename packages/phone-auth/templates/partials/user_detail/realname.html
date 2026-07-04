@@ -1,0 +1,13 @@
+{% if isSelfProfile and (udoc.realName or udoc.birthYear or udoc.school or udoc.grade) %}
+<li class="section__tab-item">
+  <h1 class="section__tab-title">{{ _('Real-name Profile') }}</h1>
+  <div class="section__tab-main">
+    <div class="section__body typo">
+      {% if udoc.realName %}<p>{{ _('Real Name') }}: {{ udoc.realName }}</p>{% endif %}
+      {% if udoc.birthYear and udoc.birthMonth %}<p>{{ _('Birth Date') }}: {{ udoc.birthYear }}-{{ udoc.birthMonth }}</p>{% endif %}
+      {% if udoc.school %}<p>{{ _('School') }}: {{ udoc.school }}</p>{% endif %}
+      {% if udoc.grade %}<p>{{ _('Grade') }}: {{ _(gradeOptions[udoc.grade] or udoc.grade) }}</p>{% endif %}
+    </div>
+  </div>
+</li>
+{% endif %}

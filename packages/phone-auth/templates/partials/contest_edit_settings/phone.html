@@ -1,0 +1,10 @@
+<div class="row">
+  {{ form.form_checkbox({
+    columns:4,
+    label:'Require Real-name Profile',
+    name:'requirePhone',
+    placeholder:_('Require verified phone and real-name profile before attending'),
+    value:tdoc.requirePhone|default(false),
+    row:false
+  }) }}
+</div>

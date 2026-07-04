@@ -1,0 +1,27 @@
+{% if phoneAuth and phoneAuth.enabled %}
+<li class="platform-list__item">
+  <div class="media">
+    <div class="media__left medium">
+      <span class="autherlist__icon icon icon-phone"></span>
+    </div>
+    <div class="media__body medium typo">
+      <p>{{ _('Phone Account') }}: {{ phoneAuth.phone if phoneAuth.hasPhone else _('Not linked') }}</p>
+      {% if phoneAuth.profile.realName %}
+        <p>{{ _('Real Name') }}: {{ phoneAuth.profile.realName }}</p>
+      {% endif %}
+      {% if phoneAuth.profile.birthYear and phoneAuth.profile.birthMonth %}
+        <p>{{ _('Birth Date') }}: {{ phoneAuth.profile.birthYear }}-{{ phoneAuth.profile.birthMonth }}</p>
+      {% endif %}
+      {% if phoneAuth.profile.school %}
+        <p>{{ _('School') }}: {{ phoneAuth.profile.school }}</p>
+      {% endif %}
+      {% if phoneAuth.profile.grade %}
+        <p>{{ _('Grade') }}: {{ _(phoneAuth.gradeOptions[phoneAuth.profile.grade] or phoneAuth.profile.grade) }}</p>
+      {% endif %}
+    </div>
+    <div class="media__right medium">
+      <a href="{{ phoneAuth.bindUrl }}" class="rounded button">{{ _('Change Phone') if phoneAuth.hasPhone else _('Link Phone') }}</a>
+    </div>
+  </div>
+</li>
+{% endif %}

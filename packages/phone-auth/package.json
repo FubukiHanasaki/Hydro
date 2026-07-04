@@ -1,0 +1,13 @@
+{
+    "name": "@hydrooj/phone-auth",
+    "version": "0.1.0",
+    "main": "index.ts",
+    "repository": "https://github.com/hydro-dev/Hydro",
+    "author": "undefined <i@undefined.moe>",
+    "license": "AGPL-3.0-or-later",
+    "dependencies": {
+        "@alicloud/dypnsapi20170525": "^2.0.0",
+        "@alicloud/openapi-client": "^0.4.15"
+    },
+    "preferUnplugged": true
+}

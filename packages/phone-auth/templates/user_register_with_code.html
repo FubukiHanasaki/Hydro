@@ -1,0 +1,40 @@
+{% extends "layout/immersive.html" %}
+{% block content %}
+<div class="row"><div class="columns">
+  <form method="POST">
+    <div>
+      <label class="inverse material textbox">
+        {% if identity.provider == 'phone' %}{{ _('Phone') }}{% else %}{{ _('Email') }}{% endif %}
+        <input type="text" value="{{ identity.id if identity.provider == 'phone' else mail }}" disabled>
+      </label>
+    </div>
+    {% if identity.provider == 'phone' and set.realName %}
+      {% set profileInverse = true %}
+      {% set profileDisabled = true %}
+      {% set profileData = set %}
+      {% include "partials/profile_fields.html" %}
+    {% endif %}
+    <div>
+      <label class="inverse material textbox">
+        {{ _('Username') }}
+        <input name="uname" type="text" value="{{ username or '' }}" autofocus>
+      </label>
+    </div>
+    <div>
+      <label class="inverse material textbox">
+        {{ _('Password') }}
+        <input name="password" type="password">
+      </label>
+    </div>
+    <div>
+      <label class="inverse material textbox">
+        {{ _('Repeat Password') }}
+        <input name="verifyPassword" type="password">
+      </label>
+    </div>
+    <div class="text-center">
+      <input type="submit" value="{{ _('Sign Up') }}" class="inverse expanded rounded primary button">
+    </div>
+  </form>
+</div></div>
+{% endblock %}

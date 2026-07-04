@@ -1,0 +1,58 @@
+{% extends "layout/home_base.html" %}
+{% block home_content %}
+<div data-heading-extract-to="#menu-item-home_security">
+  <div class="section">
+    <div class="section__header">
+      <h1 class="section__title" id="phone" data-heading>{{ _('Verify Phone Number') }}</h1>
+    </div>
+    <div class="section__body">
+      {% if prompt %}
+        <blockquote class="warn">{{ _('Please verify your phone number to keep your account reachable.') }}</blockquote>
+      {% endif %}
+      {% if hasPhone %}
+        <blockquote class="success">{{ _('Your current verified phone: {0}').format(currentPhone) }}</blockquote>
+      {% endif %}
+      {% if phoneSent %}
+        <blockquote class="success">{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}</blockquote>
+      {% endif %}
+      <form method="post">
+        <input type="hidden" name="redirect" value="{{ redirect }}">
+        {% if phoneSent %}
+          <input type="hidden" name="phone" value="{{ phone }}">
+          {% set profileDisabled = true %}
+          {% include "partials/profile_fields.html" %}
+          <div class="row"><div class="columns">
+            <label class="material textbox">
+              {{ _('Phone') }}
+              <input type="text" value="{{ phone }}" disabled>
+            </label>
+          </div></div>
+          <div class="row"><div class="columns">
+            <label class="material textbox">
+              {{ _('SMS Code') }}
+              <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" required>
+            </label>
+          </div></div>
+          <div class="row"><div class="columns">
+            <input type="submit" value="{{ _('Verify Phone') }}" class="rounded primary button">
+            {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
+          </div></div>
+        {% else %}
+          {% set profileHelp = true %}
+          {% include "partials/profile_fields.html" %}
+          <div class="row"><div class="columns">
+            <label class="material textbox">
+              {{ _('Phone') }}
+              <input name="phone" type="text" value="{{ phone }}" required>
+            </label>
+          </div></div>
+          <div class="row"><div class="columns">
+            <input type="submit" value="{{ _('Send SMS Code') }}" class="rounded primary button">
+            {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
+          </div></div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

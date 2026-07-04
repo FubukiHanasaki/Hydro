@@ -1,0 +1,53 @@
+{% if phoneAuth and phoneAuth.requirePhone %}
+<div
+  class="phone-auth-contest-profile"
+  data-required="1"
+  data-complete="{{ '1' if phoneAuth.completeProfile else '0' }}"
+  data-profile-url="{{ phoneAuth.profileUrl }}"
+>
+  <blockquote class="{{ 'note' if phoneAuth.completeProfile else 'warn' }}">
+    <p>{{ _('This contest requires verified phone and real-name profile.') }}</p>
+    {% if not phoneAuth.completeProfile and handler.user._id > 0 %}
+      <p>{{ _('Please complete the required profile before attending.') }}</p>
+    {% endif %}
+  </blockquote>
+  {% if handler.user._id > 0 and not phoneAuth.completeProfile %}
+  <div class="phone-auth-contest-dialog" style="display:none;">
+    <div>
+      <div class="row"><div class="columns">
+        <h1>{{ _('Complete Required Profile') }}</h1>
+      </div></div>
+      {% set profileData = phoneAuth.profile %}
+      {% set birthYears = phoneAuth.birthYears %}
+      {% set birthMonths = phoneAuth.birthMonths %}
+      {% set gradeOptions = phoneAuth.gradeOptions %}
+      {% set profileHelp = true %}
+      {% include "partials/profile_fields.html" %}
+      {% if phoneAuth.hasPhone %}
+      <div class="row"><div class="columns">
+        <label class="material textbox">
+          {{ _('Phone') }}
+          <input type="text" value="{{ phoneAuth.maskedPhone }}" disabled>
+        </label>
+      </div></div>
+      {% else %}
+      <div class="row"><div class="columns">
+        <label class="material textbox">
+          {{ _('Phone') }}
+          <input name="phone" type="text" value="{{ phoneAuth.phone or '' }}" required>
+        </label>
+      </div></div>
+      <div class="row"><div class="medium-7 columns">
+        <label class="material textbox">
+          {{ _('SMS Code') }}
+          <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" required>
+        </label>
+      </div><div class="medium-5 columns">
+        <button type="button" class="rounded button" data-phone-auth-send-sms>{{ _('Send SMS Code') }}</button>
+      </div></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
