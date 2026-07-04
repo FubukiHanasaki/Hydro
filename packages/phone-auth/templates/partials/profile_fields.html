@@ -1,5 +1,6 @@
 {% set profileData = profileData or profile or {} %}
 {% set textboxClass = 'inverse material textbox' if profileInverse else 'material textbox' %}
+{% set selectStyle = 'color:#111;background-color:#fff;' %}
 {% set disabledAttr = 'disabled' if profileDisabled else '' %}
 {% if profileDisabled %}
 <input type="hidden" name="realName" value="{{ profileData.realName or '' }}">
@@ -21,7 +22,7 @@
   <div class="medium-6 columns">
     <label class="{{ textboxClass }}">
       {{ _('Birth Year') }}
-      <select name="birthYear" class="select" required {{ disabledAttr }}>
+      <select name="birthYear" class="select" style="{{ selectStyle }}" required {{ disabledAttr }}>
         <option value="" disabled hidden{% if not profileData.birthYear %} selected{% endif %}>{{ _('Select') }}</option>
         {% for key, label in birthYears %}
         <option value="{{ key }}"{% if profileData.birthYear == key %} selected{% endif %}>{{ label }}</option>
@@ -32,7 +33,7 @@
   <div class="medium-6 columns">
     <label class="{{ textboxClass }}">
       {{ _('Birth Month') }}
-      <select name="birthMonth" class="select" required {{ disabledAttr }}>
+      <select name="birthMonth" class="select" style="{{ selectStyle }}" required {{ disabledAttr }}>
         <option value="" disabled hidden{% if not profileData.birthMonth %} selected{% endif %}>{{ _('Select') }}</option>
         {% for key, label in birthMonths %}
         <option value="{{ key }}"{% if profileData.birthMonth == key %} selected{% endif %}>{{ label }}</option>
@@ -50,7 +51,7 @@
 <div class="row"><div class="columns">
   <label class="{{ textboxClass }}">
     {{ _('Grade') }}
-    <select name="grade" class="select" required {{ disabledAttr }}>
+    <select name="grade" class="select" style="{{ selectStyle }}" required {{ disabledAttr }}>
       <option value="" disabled hidden{% if not profileData.grade %} selected{% endif %}>{{ _('Select') }}</option>
       {% for key, label in gradeOptions %}
       <option value="{{ key }}"{% if profileData.grade == key %} selected{% endif %}>{{ _(label) }}</option>

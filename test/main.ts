@@ -85,6 +85,7 @@ describe('App', () => {
             const currentYear = new Date().getFullYear();
             assert.doesNotMatch(phoneOnly.text, /name="mail"/);
             assert.match(phoneOnly.text, /name="phone"/);
+            assert.match(phoneOnly.text, /name="birthYear" class="select" style="color:#111;background-color:#fff;"/);
             assert.match(phoneOnly.text, /<option value="" disabled hidden selected>/);
             assert.match(phoneOnly.text, new RegExp(`<option value="${currentYear - 30}"`));
             assert.doesNotMatch(phoneOnly.text, new RegExp(`<option value="${currentYear - 31}"`));
