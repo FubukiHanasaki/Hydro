@@ -25,47 +25,38 @@
       </form>
     {% endif %}
     {% if phoneEnabled %}
-      {% if phoneSent %}
-        <blockquote class="success">{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}</blockquote>
-      {% else %}
-      <form method="POST">
+      {% set smsSent = phoneSent %}
+      <form method="POST" data-phone-auth-sms-form data-phone-auth-sms-sent="{{ '1' if smsSent else '0' }}" data-phone-auth-sms-expire="{{ expireSeconds or 300 }}">
         <input type="hidden" name="mode" value="phone">
         <div class="row"><div class="columns">
           <label class="inverse material textbox">
             {{ _('Phone') }}
-            <input name="phone" type="text" value="{{ phone or '' }}" autofocus>
+            <input name="phone" type="text" value="{{ phone or '' }}" autofocus required{% if smsSent %} readonly{% endif %}>
           </label>
         </div></div>
-        <div class="row"><div class="columns">
+        <blockquote class="success" data-phone-auth-sms-message{% if not smsSent %} style="display:none;"{% endif %}>
+          {% if smsSent %}{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}{% endif %}
+        </blockquote>
+        <div class="row" data-phone-auth-send-step{% if smsSent %} style="display:none;"{% endif %}><div class="columns">
           <div class="text-center">
-            <input type="submit" value="{{ _('Send SMS Code') }}" class="inverse rounded primary button">
+            <button type="submit" class="inverse rounded primary button" data-phone-auth-send-sms disabled>{{ _('Send SMS Code') }}</button>
           </div>
         </div></div>
-      </form>
-      {% endif %}
-      {% if phoneSent %}
-      <form method="POST">
-        <input type="hidden" name="mode" value="phone">
-        <input type="hidden" name="phone" value="{{ phone or '' }}">
-        <div class="row"><div class="columns">
-          <label class="inverse material textbox">
-            {{ _('Phone') }}
-            <input type="text" value="{{ phone or '' }}" disabled>
-          </label>
-        </div></div>
+        <div data-phone-auth-verify-step{% if not smsSent %} style="display:none;"{% endif %}>
         <div class="row"><div class="columns">
           <label class="inverse material textbox">
             {{ _('SMS Code') }}
-            <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" autofocus>
+            <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code"{% if smsSent %} required{% endif %}>
           </label>
         </div></div>
         <div class="row"><div class="columns">
           <div class="text-center">
-            <input type="submit" value="{{ _('Verify Phone') }}" class="inverse rounded primary button">
+            <button type="submit" class="inverse rounded primary button" data-phone-auth-verify-sms disabled>{{ _('Verify Phone') }}</button>
+            <button type="button" class="inverse rounded button" data-phone-auth-resend-sms disabled>{{ _('Resend SMS Code') }}</button>
           </div>
         </div></div>
+        </div>
       </form>
-      {% endif %}
     {% endif %}
   </div>
 </div></div>

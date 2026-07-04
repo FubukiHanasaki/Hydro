@@ -12,45 +12,38 @@
       {% if hasPhone %}
         <blockquote class="success">{{ _('Your current verified phone: {0}').format(currentPhone) }}</blockquote>
       {% endif %}
-      {% if phoneSent %}
-        <blockquote class="success">{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}</blockquote>
-      {% endif %}
-      <form method="post">
+      {% set smsSent = phoneSent %}
+      <form method="post" data-phone-auth-sms-form data-phone-auth-sms-sent="{{ '1' if smsSent else '0' }}" data-phone-auth-sms-expire="{{ expireSeconds or 300 }}">
         <input type="hidden" name="redirect" value="{{ redirect }}">
-        {% if phoneSent %}
-          <input type="hidden" name="phone" value="{{ phone }}">
-          {% set profileDisabled = true %}
-          {% include "partials/profile_fields.html" %}
-          <div class="row"><div class="columns">
-            <label class="material textbox">
-              {{ _('Phone') }}
-              <input type="text" value="{{ phone }}" disabled>
-            </label>
-          </div></div>
-          <div class="row"><div class="columns">
-            <label class="material textbox">
-              {{ _('SMS Code') }}
-              <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" required>
-            </label>
-          </div></div>
-          <div class="row"><div class="columns">
-            <input type="submit" value="{{ _('Verify Phone') }}" class="rounded primary button">
-            {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
-          </div></div>
-        {% else %}
-          {% set profileHelp = true %}
-          {% include "partials/profile_fields.html" %}
-          <div class="row"><div class="columns">
-            <label class="material textbox">
-              {{ _('Phone') }}
-              <input name="phone" type="text" value="{{ phone }}" required>
-            </label>
-          </div></div>
-          <div class="row"><div class="columns">
-            <input type="submit" value="{{ _('Send SMS Code') }}" class="rounded primary button">
-            {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
-          </div></div>
-        {% endif %}
+        {% set profileHelp = not smsSent %}
+        {% set profileDisabled = smsSent %}
+        {% include "partials/profile_fields.html" %}
+        <div class="row"><div class="columns">
+          <label class="material textbox">
+            {{ _('Phone') }}
+            <input name="phone" type="text" value="{{ phone }}" required{% if smsSent %} readonly{% endif %}>
+          </label>
+        </div></div>
+        <blockquote class="success" data-phone-auth-sms-message{% if not smsSent %} style="display:none;"{% endif %}>
+          {% if smsSent %}{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}{% endif %}
+        </blockquote>
+        <div class="row" data-phone-auth-send-step{% if smsSent %} style="display:none;"{% endif %}><div class="columns">
+          <button type="submit" class="rounded primary button" data-phone-auth-send-sms disabled>{{ _('Send SMS Code') }}</button>
+          {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
+        </div></div>
+        <div data-phone-auth-verify-step{% if not smsSent %} style="display:none;"{% endif %}>
+        <div class="row"><div class="columns">
+          <label class="material textbox">
+            {{ _('SMS Code') }}
+            <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code"{% if smsSent %} required{% endif %}>
+          </label>
+        </div></div>
+        <div class="row"><div class="columns">
+          <button type="submit" class="rounded primary button" data-phone-auth-verify-sms disabled>{{ _('Verify Phone') }}</button>
+          <button type="button" class="rounded button" data-phone-auth-resend-sms disabled>{{ _('Resend SMS Code') }}</button>
+          {% if prompt %}<a href="{{ redirect }}" class="rounded button">{{ _('Skip for now') }}</a>{% endif %}
+        </div></div>
+        </div>
       </form>
     </div>
   </div>
