@@ -6,15 +6,33 @@ Email registration is disabled.: 信箱註冊已關閉。
 Phone registration is disabled.: 手機號註冊已關閉。
 Registration is currently disabled.: 註冊目前已關閉。
 Phone: 手機號
+Phone Authentication: 手機認證
 Send SMS Code: 傳送簡訊驗證碼
+Resend SMS Code: 重新傳送驗證碼
+Sending...: 傳送中...
+Verifying...: 正在驗證...
+Please enter username.: 請輸入使用者名稱。
+Please enter password.: 請輸入密碼。
+Please repeat password.: 請再次輸入密碼。
+Password must be at least 8 characters and include both letters and numbers.: 密碼至少 8 位，且必須同時包含字母和數字。
+Password strength is OK.: 密碼強度符合要求。
+Passwords match.: 兩次輸入的密碼一致。
+Checking...: 檢查中...
+Username is available.: 使用者名稱可以使用。
+Username is already taken.: 使用者名稱已存在。
+Phone number format is invalid.: 手機號格式不正確。
+Phone number is available.: 手機號可以使用。
+Phone number is already registered.: 手機號已被註冊。
+Phone number {0} is already registered.: 手機號 {0} 已被註冊。
 SMS Code: 簡訊驗證碼
 SMS verification code has been sent.: 簡訊驗證碼已傳送。
 Valid for {0} seconds.: '{0} 秒內有效。'
 Verify Phone: 驗證手機號
 Username / Phone: 使用者名稱 / 手機號
-setting_sms: 簡訊設定
-Real Name: 真實姓名
-Real Name is only visible to you and site administrators.: 真實姓名僅自己和站點管理員可見。
+Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-). Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed. Each Chinese character counts as one character.: 使用者名稱僅可使用漢字、英文字母、數字、底線（_）和短橫線（-）。長度 3-31 個字元；如果只由漢字組成，最短可為 2 個漢字。每個漢字按 1 個字元計算。
+setting_registration: 註冊設定
+Real Name: 中文姓名
+Real Name is only visible to you and site administrators.: 中文姓名僅自己和站點管理員可見。
 Verify Phone Number: 驗證手機號
 Please verify your phone number to keep your account reachable.: 請驗證手機號，以便帳號保持可聯絡。
 'Your current verified phone: {0}': '目前已驗證手機號：{0}'

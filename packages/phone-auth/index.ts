@@ -1,9 +1,9 @@
 import { createHash } from 'crypto';
 import {
     ContestModel, Context, CreateError, ForbiddenError, Handler, InvalidTokenError, NotFoundError,
-    OplogModel, PRIV, Schema, SettingModel, SystemError, SystemModel, TokenModel,
+    OplogModel, PERM, PRIV, randomstring, Schema, SettingModel, SystemError, SystemModel, TokenModel, Types,
     UserAlreadyExistError, UserFacingError, UserModel, UserNotFoundError,
-    ValidationError,
+    ValidationError, VerifyPasswordError,
 } from 'hydrooj';
 
 export const name = 'phone-auth';
@@ -13,14 +13,14 @@ export const Config = Schema.object({
     enabled: Schema.boolean().default(false).description('Enable phone authentication'),
     allowMailRegistration: Schema.boolean().default(true).description('Allow email registration'),
     allowPhoneRegistration: Schema.boolean().default(true).description('Allow phone registration'),
-    accessKeyId: Schema.string().default('').description('Aliyun AccessKey ID').role('password'),
-    accessKeySecret: Schema.string().default('').description('Aliyun AccessKey Secret').role('password'),
+    accessKeyId: Schema.string().default('').description('Aliyun AccessKey ID').role('secret'),
+    accessKeySecret: Schema.string().default('').description('Aliyun AccessKey Secret').role('secret'),
     endpoint: Schema.string().default('dypnsapi.aliyuncs.com').description('Aliyun SMS endpoint'),
     signName: Schema.string().default('').description('Aliyun SMS sign name'),
     templateCode: Schema.string().default('').description('Aliyun SMS template code'),
     codeLength: Schema.number().step(1).min(4).max(8).default(6).description('SMS verification code length'),
     expireSeconds: Schema.number().step(1).min(60).max(1800).default(300).description('SMS verification code lifetime'),
-});
+}).description('Phone Authentication');
 
 type PhoneAuthConfig = ReturnType<typeof Config>;
 let activeConfig: PhoneAuthConfig;
@@ -28,13 +28,22 @@ let activeConfig: PhoneAuthConfig;
 const TYPE_SMS_VERIFICATION = 1002;
 const TYPE_PHONE_REGISTRATION = 1003;
 const SMS_TOKEN_TEXT = 'SMS Verification';
-const PHONE_REGISTRATION_TEXT = 'Phone Registration';
 
 const SendSmsError = CreateError('SendSmsError', UserFacingError, 'Failed to send SMS to {0}. ({1})', 500);
 const RegistrationMethodDisabledError = CreateError(
     'RegistrationMethodDisabledError',
     ForbiddenError,
     '{0} registration is disabled.',
+);
+const WeakPasswordError = CreateError(
+    'WeakPasswordError',
+    ForbiddenError,
+    'Password must be at least 8 characters and include both letters and numbers.',
+);
+const PhoneAlreadyRegisteredError = CreateError(
+    'PhoneAlreadyRegisteredError',
+    ForbiddenError,
+    'Phone number {0} is already registered.',
 );
 
 const GRADE_OPTIONS = {
@@ -54,6 +63,8 @@ const GRADE_OPTIONS = {
 };
 
 const BIRTH_YEAR_LOOKBACK = 30;
+const USERNAME_ALLOWED_RE = /^[A-Za-z0-9_\-\u4E00-\u9FA5]+$/;
+const USERNAME_CHINESE_RE = /^[\u4E00-\u9FA5]+$/;
 
 type ProfileFields = {
     realName: string;
@@ -105,6 +116,33 @@ function normalizePhone(input: string) {
     if (mainland) return mainland[1];
     if (/^\+?[1-9]\d{5,19}$/.test(value)) return value.replace(/^\+/, '');
     throw new ValidationError('phone');
+}
+
+function normalizeUsername(input: string) {
+    let value = '';
+    try {
+        value = Types.Username[0](input || '');
+    } catch (e) {
+        throw new ValidationError('uname');
+    }
+    const length = [...value].length;
+    const validLength = USERNAME_CHINESE_RE.test(value)
+        ? length >= 2 && length <= 31
+        : length >= 3 && length <= 31;
+    if (!USERNAME_ALLOWED_RE.test(value) || !validLength) throw new ValidationError('uname');
+    return value;
+}
+
+function assertStrongPassword(password: string) {
+    const value = `${password || ''}`;
+    if (value.length < 8 || value.length > 255 || !/[A-Za-z]/.test(value) || !/\d/.test(value)) {
+        throw new WeakPasswordError();
+    }
+}
+
+function assertNewPassword(password: string, verifyPassword: string) {
+    if (password !== verifyPassword) throw new VerifyPasswordError();
+    assertStrongPassword(password);
 }
 
 function maskPhone(phone: string) {
@@ -345,11 +383,25 @@ async function bindVerifiedPhone(ctx: Context, uid: number, phone: string, profi
             { upsert: true },
         );
     } catch (e) {
-        if (duplicateKey(e)) throw new UserAlreadyExistError(maskPhone(phone));
+        if (duplicateKey(e)) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         throw e;
     }
     await coll.deleteMany({ platform: 'phone', uid, id: { $ne: phone } });
     await UserModel.setById(uid, { phone, phoneVerified: true, ...profile });
+}
+
+async function successfulPhoneRegister(that: Handler, uid: number) {
+    const udoc = await UserModel.getById(that.args.domainId, uid);
+    await UserModel.setById(uid, { loginat: new Date(), loginip: that.request.ip });
+    that.context.HydroContext.user = udoc;
+    that.session.viewLang = '';
+    that.session.uid = uid;
+    that.session.sudo = null;
+    that.session.sudoUid = null;
+    that.session.scope = PERM.PERM_ALL.toString();
+    that.session.oauthBind = null;
+    that.session.recreate = true;
+    await OplogModel.log(that, 'user.loginSuccess', { uid });
 }
 
 async function reservePhoneRegistration(phone: string) {
@@ -357,19 +409,59 @@ async function reservePhoneRegistration(phone: string) {
     try {
         await TokenModel.add(TYPE_PHONE_REGISTRATION, unsavedExpireSeconds(), { phone, purpose: 'register' }, id);
     } catch (e) {
-        if (duplicateKey(e)) throw new UserAlreadyExistError(maskPhone(phone));
+        if (duplicateKey(e)) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         throw e;
     }
     return id;
 }
 
+async function ensureRegisterAvailable(that: Handler, phone: string, uname: string) {
+    if (await UserModel.getByUname(that.args.domainId, uname)) throw new UserAlreadyExistError(uname);
+    if (await oauthService(that.ctx).get('phone', phone)) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
+    if (await TokenModel.get(registrationReservationId(phone), TYPE_PHONE_REGISTRATION)) {
+        throw new PhoneAlreadyRegisteredError(maskPhone(phone));
+    }
+}
+
+class PhoneRegisterCheckHandler extends Handler {
+    noCheckPermView = true;
+
+    async get() {
+        await this.limitRate('phone_auth_register_check', 60, 120);
+        const unameInput = `${this.request.query.uname || ''}`;
+        const phoneInput = `${this.request.query.phone || ''}`;
+        const result: Record<string, any> = {};
+        try {
+            const uname = normalizeUsername(unameInput);
+            const existing = await UserModel.getByUname(this.args.domainId, uname);
+            result.username = {
+                valid: true,
+                available: !existing,
+            };
+        } catch (e) {
+            result.username = { valid: false, available: false };
+        }
+        try {
+            const phone = normalizePhone(phoneInput);
+            const existing = await oauthService(this.ctx).get('phone', phone);
+            const reserved = await TokenModel.get(registrationReservationId(phone), TYPE_PHONE_REGISTRATION);
+            result.phone = {
+                valid: true,
+                available: !existing && !reserved,
+            };
+        } catch (e) {
+            result.phone = { valid: false, available: false };
+        }
+        this.response.body = result;
+    }
+}
+
 async function sendSmsRegister(that: Handler, config: PhoneAuthConfig, phoneInput: string, smsCode = '', profileInput: Record<string, any> = {}) {
     if (!isPhoneRegistrationEnabled(config)) throw new RegistrationMethodDisabledError('Phone');
     const phone = normalizePhone(phoneInput);
-    if (await oauthService(that.ctx).get('phone', phone)) throw new UserAlreadyExistError(maskPhone(phone));
-    if (await TokenModel.get(registrationReservationId(phone), TYPE_PHONE_REGISTRATION)) {
-        throw new UserAlreadyExistError(maskPhone(phone));
-    }
+    const uname = normalizeUsername(profileInput.uname);
+    assertNewPassword(profileInput.password, profileInput.verifyPassword);
+    await ensureRegisterAvailable(that, phone, uname);
     const expireSeconds = getConfig(config).expireSeconds;
     if (!smsCode) {
         const profile = normalizeProfile(profileInput);
@@ -378,18 +470,25 @@ async function sendSmsRegister(that: Handler, config: PhoneAuthConfig, phoneInpu
             that.limitRate('send_sms', 3600, 30),
             OplogModel.log(that, 'user.register.sms', {}),
         ]);
-        const tid = await createOrUpdateSmsToken(expireSeconds, { phone, purpose: 'register' }, { profile });
+        const tid = await createOrUpdateSmsToken(expireSeconds, { phone, purpose: 'register' }, { profile, uname });
         try {
             await sendAliyunSmsCode(config, phone, tid);
         } catch (e) {
             await TokenModel.del(tid, TYPE_SMS_VERIFICATION);
             throw e;
         }
+        if (that.request.json) {
+            that.response.body = {
+                phoneSent: true, expireSeconds, phone, uname,
+            };
+            return;
+        }
         that.response.template = 'user_register.html';
         setBody(that, {
             mailEnabled: isMailRegistrationEnabled(config),
             phoneEnabled: true,
             phone,
+            username: uname,
             phoneSent: true,
             expireSeconds,
             ...profileFormBody({ ...profile, phone }),
@@ -403,35 +502,26 @@ async function sendSmsRegister(that: Handler, config: PhoneAuthConfig, phoneInpu
         .toArray();
     if (!doc) throw new InvalidTokenError(SMS_TOKEN_TEXT);
     const profile = normalizeProfile(doc.profile || profileInput);
+    if (doc.uname && doc.uname !== uname) throw new ValidationError('uname');
     const verified = await verifyAliyunSmsCode(config, phone, smsCode.trim(), doc._id);
     if (!verified) throw new InvalidTokenError(SMS_TOKEN_TEXT);
     const reservation = await reservePhoneRegistration(phone);
     try {
         await TokenModel.del(doc._id, TYPE_SMS_VERIFICATION);
-        const [registrationCode] = await TokenModel.add(
-            TokenModel.TYPE_REGISTRATION,
-            unsavedExpireSeconds(),
-            {
-                redirect: that.domain.registerRedirect,
-                identity: {
-                    provider: 'phone',
-                    platform: 'phone',
-                    id: phone,
-                },
-                reservation,
-                set: {
-                    phone,
-                    phoneVerified: true,
-                    ...profile,
-                },
-            },
-        );
-        await TokenModel.update(reservation, TYPE_PHONE_REGISTRATION, unsavedExpireSeconds(), { registrationCode });
-        that.response.redirect = that.url('user_register_with_code', { code: registrationCode });
+        const uid = await UserModel.create(`${randomstring(12)}@invalid.local`, uname, profileInput.password, undefined, that.request.ip);
+        await bindVerifiedPhone(that.ctx, uid, phone, profile);
+        if (that.session.viewLang) await UserModel.setById(uid, { viewLang: that.session.viewLang });
+        await TokenModel.del(reservation, TYPE_PHONE_REGISTRATION);
+        await successfulPhoneRegister(that, uid);
+        that.response.redirect = that.domain.registerRedirect || that.url('home_settings', { category: 'preference' });
     } catch (e) {
         await TokenModel.del(reservation, TYPE_PHONE_REGISTRATION);
         throw e;
     }
+}
+
+function rejectLegacyPhoneRegistrationToken(that: Handler & { tdoc?: any }) {
+    if (that.tdoc?.identity?.provider === 'phone') throw new InvalidTokenError('Phone Registration');
 }
 
 async function sendPhoneLostPass(that: Handler, config: PhoneAuthConfig, phoneInput: string, smsCode = '') {
@@ -513,7 +603,7 @@ class PhoneBindHandler extends Handler {
         const profile = normalizeProfile(this.request.body || {});
         const expireSeconds = getConfig(activeConfig).expireSeconds;
         const existing = await oauthService(this.ctx).get('phone', phone);
-        if (existing && existing !== this.user._id) throw new UserAlreadyExistError(maskPhone(phone));
+        if (existing && existing !== this.user._id) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         if (!smsCode) {
             await Promise.all([
                 this.limitRate('send_sms_bind', 60, 1, phone),
@@ -553,7 +643,7 @@ class PhoneProfileHandler extends Handler {
         if (relation) throw new ValidationError('phone');
         const phone = normalizePhone(this.request.body?.phone || '');
         const existing = await oauthService(this.ctx).get('phone', phone);
-        if (existing && existing !== this.user._id) throw new UserAlreadyExistError(maskPhone(phone));
+        if (existing && existing !== this.user._id) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         await Promise.all([
             this.limitRate('send_sms_profile', 60, 1, phone),
             this.limitRate('send_sms_profile', 3600, 30),
@@ -585,7 +675,7 @@ class PhoneProfileHandler extends Handler {
         if (!isAliyunSmsEnabled(activeConfig)) throw new SystemError('SMS registration is not enabled');
         const phone = normalizePhone(this.request.body?.phone || '');
         const existing = await oauthService(this.ctx).get('phone', phone);
-        if (existing && existing !== this.user._id) throw new UserAlreadyExistError(maskPhone(phone));
+        if (existing && existing !== this.user._id) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         await this.limitRate('verify_sms_profile', 60, 5, phone);
         const [doc] = await TokenModel.getMulti(TYPE_SMS_VERIFICATION, {
             phone, uid: this.user._id, purpose: 'profile',
@@ -608,7 +698,7 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
             'phone-auth': Schema.object({
                 allowMailRegistration: Schema.boolean().default(true).description('Allow email registration'),
                 allowPhoneRegistration: Schema.boolean().default(true).description('Allow phone registration'),
-            }).extra('family', 'setting_sms'),
+            }).extra('family', 'setting_registration'),
         }));
         c.setting.AccountSetting(SettingModel.Setting(
             'setting_info',
@@ -659,6 +749,7 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
 
     ctx.Route('phone_auth_bind', '/home/phone', PhoneBindHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route('phone_auth_profile', '/home/phone/profile', PhoneProfileHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route('phone_auth_register_check', '/phone-auth/register/check', PhoneRegisterCheckHandler);
 
     (ctx.on as any)('user/login', async (that: Handler, payload) => {
         if (payload.udoc) return;
@@ -696,31 +787,12 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
         if (that.tdoc?.identity?.provider === 'mail' && !isMailRegistrationEnabled(config)) {
             throw new RegistrationMethodDisabledError('Email');
         }
-        if (that.tdoc?.identity?.provider === 'phone' && !isPhoneRegistrationEnabled(config)) {
-            throw new RegistrationMethodDisabledError('Phone');
-        }
+        rejectLegacyPhoneRegistrationToken(that);
+        assertNewPassword(`${that.request.body?.password || ''}`, `${that.request.body?.verifyPassword || ''}`);
     });
 
-    ctx.on('handler/before/UserRegisterWithCode#post', async (that) => {
-        if (that.tdoc?.identity?.provider !== 'phone') return;
-        const phone = that.tdoc.identity.id;
-        const reservation = that.tdoc.reservation || registrationReservationId(phone);
-        const rdoc = await TokenModel.get(reservation, TYPE_PHONE_REGISTRATION);
-        if (!rdoc || rdoc.phone !== phone || rdoc.registrationCode !== that.args.code) {
-            throw new InvalidTokenError(PHONE_REGISTRATION_TEXT);
-        }
-        if (await oauthService(that.ctx).get('phone', phone)) throw new UserAlreadyExistError(maskPhone(phone));
-    });
-
-    ctx.on('handler/after/UserRegisterWithCode#get', (that) => {
-        if (that.tdoc?.identity?.provider !== 'phone') return;
-        setBody(that, profileFormBody(that.tdoc.set || {}));
-    });
-
-    ctx.on('handler/after/UserRegisterWithCode#post', async (that) => {
-        if (that.tdoc?.identity?.provider !== 'phone') return;
-        const reservation = that.tdoc.reservation || registrationReservationId(that.tdoc.identity.id);
-        await TokenModel.del(reservation, TYPE_PHONE_REGISTRATION);
+    ctx.on('handler/before/UserRegisterWithCode#get', (that) => {
+        rejectLegacyPhoneRegistrationToken(that);
     });
 
     ctx.on('handler/after/UserLostPass#get', (that) => {
@@ -735,6 +807,15 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
         if (mode !== 'phone' && !phone) return;
         await sendPhoneLostPass(that, config, phone, smsCode || '');
         return 'cleanup';
+    });
+
+    ctx.on('handler/before/UserLostPassWithCode#post', (that) => {
+        assertNewPassword(`${that.request.body?.password || ''}`, `${that.request.body?.verifyPassword || ''}`);
+    });
+
+    ctx.on('handler/before-operation/HomeSecurity', (that) => {
+        if (that.request.body?.operation !== 'change_password') return;
+        assertNewPassword(`${that.request.body?.password || ''}`, `${that.request.body?.verifyPassword || ''}`);
     });
 
     ctx.on('handler/after/UserLogin#post', async (that) => {

@@ -6,13 +6,31 @@ Email registration is disabled.: Email registration is disabled.
 Phone registration is disabled.: Phone registration is disabled.
 Registration is currently disabled.: Registration is currently disabled.
 Phone: Phone
+Phone Authentication: 휴대폰 인증
 Send SMS Code: Send SMS Code
+Resend SMS Code: SMS 코드 다시 보내기
+Sending...: 보내는 중...
+Verifying...: 인증 중...
+Please enter username.: 사용자 이름을 입력하세요.
+Please enter password.: 비밀번호를 입력하세요.
+Please repeat password.: 비밀번호를 다시 입력하세요.
+Password must be at least 8 characters and include both letters and numbers.: 비밀번호는 8자 이상이며 문자와 숫자를 모두 포함해야 합니다.
+Password strength is OK.: Password strength is OK.
+Passwords match.: Passwords match.
+Checking...: Checking...
+Username is available.: Username is available.
+Username is already taken.: Username is already taken.
+Phone number format is invalid.: Phone number format is invalid.
+Phone number is available.: Phone number is available.
+Phone number is already registered.: Phone number is already registered.
+Phone number {0} is already registered.: Phone number {0} is already registered.
 SMS Code: SMS Code
 SMS verification code has been sent.: SMS verification code has been sent.
 Valid for {0} seconds.: Valid for {0} seconds.
 Verify Phone: Verify Phone
 Username / Phone: Username / Phone
-setting_sms: SMS 설정
+Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-). Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed. Each Chinese character counts as one character.: 사용자 이름은 한자, 영문자, 숫자, 밑줄(_), 하이픈(-)만 사용할 수 있습니다. 길이는 3-31자이며, 한자로만 구성된 경우 2자도 허용됩니다. 한자 1자는 1자로 계산합니다.
+setting_registration: 등록 설정
 Real Name: Real Name
 Real Name is only visible to you and site administrators.: Real Name is only visible to you and site administrators.
 Verify Phone Number: Verify Phone Number

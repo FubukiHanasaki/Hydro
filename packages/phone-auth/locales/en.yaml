@@ -6,13 +6,31 @@ Email registration is disabled.: Email registration is disabled.
 Phone registration is disabled.: Phone registration is disabled.
 Registration is currently disabled.: Registration is currently disabled.
 Phone: Phone
+Phone Authentication: Phone Authentication
 Send SMS Code: Send SMS Code
+Resend SMS Code: Resend SMS Code
+Sending...: Sending...
+Verifying...: Verifying...
+Please enter username.: Please enter username.
+Please enter password.: Please enter password.
+Please repeat password.: Please repeat password.
+Password must be at least 8 characters and include both letters and numbers.: Password must be at least 8 characters and include both letters and numbers.
+Password strength is OK.: Password strength is OK.
+Passwords match.: Passwords match.
+Checking...: Checking...
+Username is available.: Username is available.
+Username is already taken.: Username is already taken.
+Phone number format is invalid.: Phone number format is invalid.
+Phone number is available.: Phone number is available.
+Phone number is already registered.: Phone number is already registered.
+Phone number {0} is already registered.: Phone number {0} is already registered.
 SMS Code: SMS Code
 SMS verification code has been sent.: SMS verification code has been sent.
 Valid for {0} seconds.: Valid for {0} seconds.
 Verify Phone: Verify Phone
 Username / Phone: Username / Phone
-setting_sms: SMS Settings
+Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-). Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed. Each Chinese character counts as one character.: Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-). Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed. Each Chinese character counts as one character.
+setting_registration: Registration Settings
 Real Name: Real Name
 Real Name is only visible to you and site administrators.: Real Name is only visible to you and site administrators.
 Verify Phone Number: Verify Phone Number
