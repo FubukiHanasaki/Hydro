@@ -600,11 +600,11 @@ class PhoneBindHandler extends Handler {
         }
         const { phone: phoneInput, smsCode = '', redirect = '' } = this.request.body || {};
         const phone = normalizePhone(phoneInput);
-        const profile = normalizeProfile(this.request.body || {});
         const expireSeconds = getConfig(activeConfig).expireSeconds;
         const existing = await oauthService(this.ctx).get('phone', phone);
         if (existing && existing !== this.user._id) throw new PhoneAlreadyRegisteredError(maskPhone(phone));
         if (!smsCode) {
+            const profile = normalizeProfile(this.request.body || {});
             await Promise.all([
                 this.limitRate('send_sms_bind', 60, 1, phone),
                 this.limitRate('send_sms_bind', 3600, 30),
@@ -629,7 +629,7 @@ class PhoneBindHandler extends Handler {
         if (!doc) throw new InvalidTokenError(SMS_TOKEN_TEXT);
         const verified = await verifyAliyunSmsCode(activeConfig, phone, smsCode.trim(), doc._id);
         if (!verified) throw new InvalidTokenError(SMS_TOKEN_TEXT);
-        await bindVerifiedPhone(this.ctx, this.user._id, phone, normalizeProfile(doc.profile || profile));
+        await bindVerifiedPhone(this.ctx, this.user._id, phone, normalizeProfile(doc.profile || this.request.body || {}));
         await TokenModel.del(doc._id, TYPE_SMS_VERIFICATION);
         this.session.phoneAuthPrompted = false;
         this.response.redirect = redirect || this.url('home_security');

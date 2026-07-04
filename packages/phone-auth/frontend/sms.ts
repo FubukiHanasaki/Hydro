@@ -434,7 +434,21 @@ function enableSmsControls($form: JQuery) {
   $form.find('[data-phone-auth-send-sms], [data-phone-auth-resend-sms], [data-phone-auth-verify-sms]').prop('disabled', false);
 }
 
+function mirrorSubmittedProfile($form: JQuery) {
+  ['realName', 'birthYear', 'birthMonth', 'school', 'grade'].forEach((name) => {
+    const $field = $form.find(`[name="${name}"]`).not('[type="hidden"]').first();
+    if (!$field.length) return;
+    let $mirror = $form.find(`input[type="hidden"][name="${name}"]`).first();
+    if (!$mirror.length) {
+      $mirror = $(`<input type="hidden" name="${name}">`);
+      $field.before($mirror);
+    }
+    $mirror.val($field.val() as string);
+  });
+}
+
 function lockSubmittedProfile($form: JQuery) {
+  mirrorSubmittedProfile($form);
   ['realName', 'birthYear', 'birthMonth', 'school', 'grade'].forEach((name) => {
     $form.find(`[name="${name}"]`).not('[type="hidden"]').prop('disabled', true).trigger('vjFormDisableUpdate');
   });

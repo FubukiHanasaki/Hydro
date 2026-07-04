@@ -194,7 +194,7 @@ describe('App', () => {
         assert.equal(sendRes.body.expireSeconds, 300);
         await agent.post('/home/phone')
             .send({
-                phone, ...RootProfile, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
+                phone, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
             })
             .expect(302);
         const UserModel = require('../packages/hydrooj/src/model/user').default;
