@@ -36,6 +36,7 @@
           <p>{{ _('The contest is a flexible time contest. You need to complete the contest within a specified time after you attended.') }}</p>
         </blockquote>
       {% endif %}
+      {% for page in findSubModule('partials/contest_detail/') %}{% include page %}{% endfor %}
       </div>
     </div>
     {% if files.length %}

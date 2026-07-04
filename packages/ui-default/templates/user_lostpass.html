@@ -3,14 +3,12 @@
 <div class="row"><div class="columns">
   <div class="immersive--content immersive--center">
     <h1>{{ _('Lost Password') }}</h1>
-    {% if not mailEnabled and not phoneEnabled %}
+    {% if not model.system.get('smtp.user') %}
       <div class="text-center">
         {{ _('Relax and try to remember your password.') }}
       </div>
-    {% endif %}
-    {% if mailEnabled %}
+    {% else %}
       <form method="POST">
-        <input type="hidden" name="mode" value="mail">
         <div class="row"><div class="columns">
           <label class="inverse material textbox">
             {{ _('Email') }}
@@ -23,49 +21,6 @@
           </div>
         </div></div>
       </form>
-    {% endif %}
-    {% if phoneEnabled %}
-      {% if phoneSent %}
-        <blockquote class="success">{{ _('SMS verification code has been sent.') }} {{ _('Valid for {0} seconds.').format(expireSeconds) }}</blockquote>
-      {% else %}
-      <form method="POST">
-        <input type="hidden" name="mode" value="phone">
-        <div class="row"><div class="columns">
-          <label class="inverse material textbox">
-            {{ _('Phone') }}
-            <input name="phone" type="text" value="{{ phone or '' }}" autofocus>
-          </label>
-        </div></div>
-        <div class="row"><div class="columns">
-          <div class="text-center">
-            <input type="submit" value="{{ _('Send SMS Code') }}" class="inverse rounded primary button">
-          </div>
-        </div></div>
-      </form>
-      {% endif %}
-      {% if phoneSent %}
-      <form method="POST">
-        <input type="hidden" name="mode" value="phone">
-        <input type="hidden" name="phone" value="{{ phone or '' }}">
-        <div class="row"><div class="columns">
-          <label class="inverse material textbox">
-            {{ _('Phone') }}
-            <input type="text" value="{{ phone or '' }}" disabled>
-          </label>
-        </div></div>
-        <div class="row"><div class="columns">
-          <label class="inverse material textbox">
-            {{ _('SMS Code') }}
-            <input name="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" autofocus>
-          </label>
-        </div></div>
-        <div class="row"><div class="columns">
-          <div class="text-center">
-            <input type="submit" value="{{ _('Verify Phone') }}" class="inverse rounded primary button">
-          </div>
-        </div></div>
-      </form>
-      {% endif %}
     {% endif %}
   </div>
 </div></div>

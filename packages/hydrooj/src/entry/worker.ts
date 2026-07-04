@@ -16,6 +16,14 @@ const argv = cac().parse();
 const logger = new Logger('worker');
 const tmpdir = path.resolve(os.tmpdir(), 'hydro');
 
+async function waitForOptionalService(ctx: Context, name: string) {
+    if (!(ctx.reflect as any).get(name, false)) return;
+    const start = Date.now();
+    while (!(ctx as any).get(name, true) && Date.now() - start < 5000) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+}
+
 export async function apply(ctx: Context) {
     fs.ensureDirSync(tmpdir);
     require('../utils');
@@ -93,9 +101,10 @@ export async function apply(ctx: Context) {
         await server.listen();
         await ctx.parallel('app/listen');
         logger.success('Server started');
-        process.send?.('ready');
         process.title = `HydroOJ (v${global.Hydro.version.hydrooj}, worker ${process.env.NODE_APP_INSTANCE}${process.env.DEV ? ', debug' : ''})`;
         await ctx.parallel('app/ready');
+        await waitForOptionalService(ctx, 'template');
+        process.send?.('ready');
     });
     return { fail };
 }

@@ -86,6 +86,7 @@
             </li>
             {%- endif -%}{%- endfor -%}
           </form>
+          {% for page in findSubModule('partials/home_security/') %}{% include page %}{% endfor %}
           <form method="post">
             <input type="hidden" name="operation" value="link_account">
             {%- for method in handler.loginMethods -%}

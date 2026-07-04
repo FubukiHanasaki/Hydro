@@ -14,9 +14,6 @@ import {
 import { TokenDoc, Udoc, User } from '../interface';
 import avatar from '../lib/avatar';
 import { sendMail } from '../lib/mail';
-import {
-    isAliyunSmsEnabled, maskPhone, normalizePhone, sendAliyunSmsCode, verifyAliyunSmsCode,
-} from '../lib/sms';
 import { verifyTFA } from '../lib/verifyTFA';
 import BlackListModel from '../model/blacklist';
 import { PERM, PRIV, STATUS } from '../model/builtin';
@@ -46,6 +43,15 @@ async function successfulAuth(this: Handler, udoc: User) {
     if (udoc._id !== 0) await oplog.log(this, 'user.loginSuccess', { uid: udoc._id });
 }
 
+async function getUserByLogin(that: Handler, domainId: string, login: string) {
+    let udoc = await user.getByEmail(domainId, login);
+    udoc ||= await user.getByUname(domainId, login);
+    if (udoc) return udoc;
+    const payload: { domainId: string, login: string, udoc?: User | null } = { domainId, login };
+    await (that.ctx.serial as any)('user/login', that, payload);
+    return payload.udoc || null;
+}
+
 class UserLoginHandler extends Handler {
     noCheckPermView = true;
     async prepare() {
@@ -57,16 +63,7 @@ class UserLoginHandler extends Handler {
     }
 
     async getUserByLogin(domainId: string, login: string) {
-        let udoc = await user.getByEmail(domainId, login);
-        udoc ||= await user.getByUname(domainId, login);
-        if (!udoc) {
-            try {
-                const phone = normalizePhone(login);
-                const uid = await this.ctx.oauth.get('phone', phone);
-                if (uid) udoc = await user.getById(domainId, uid);
-            } catch (e) { }
-        }
-        return udoc;
+        return await getUserByLogin(this, domainId, login);
     }
 
     @param('uname', Types.String)
@@ -151,8 +148,7 @@ class UserTFAHandler extends Handler {
 
     @param('q', Types.String)
     async get({ }, q: string) {
-        let udoc = await user.getByUname('system', q);
-        udoc ||= await user.getByEmail('system', q);
+        const udoc = await getUserByLogin(this, 'system', q.trim());
         if (!udoc) this.response.body = { tfa: false, authn: false };
         else this.response.body = { tfa: udoc.tfa, authn: udoc.authn };
     }
@@ -253,10 +249,7 @@ export class UserRegisterHandler extends Handler {
 
     async get() {
         this.response.template = 'user_register.html';
-        this.response.body = {
-            mailEnabled: system.get('smtp.verify') && system.get('smtp.user'),
-            phoneEnabled: isAliyunSmsEnabled(),
-        };
+        this.response.body = { mailEnabled: true };
     }
 
     async sendMailRegister(mail: string) {
@@ -295,78 +288,9 @@ export class UserRegisterHandler extends Handler {
         } else this.response.redirect = this.url('user_register_with_code', { code: t[0] });
     }
 
-    async sendSmsRegister(phone: string, smsCode = '') {
-        if (!isAliyunSmsEnabled()) throw new SystemError('SMS registration is not enabled');
-        phone = normalizePhone(phone);
-        if (await this.ctx.oauth.get('phone', phone)) throw new UserAlreadyExistError(maskPhone(phone));
-        const expireSeconds = system.get('sms.aliyun.expireSeconds') || 300;
-        if (!smsCode) {
-            await Promise.all([
-                this.limitRate('send_sms', 60, 1, phone),
-                this.limitRate('send_sms', 3600, 30),
-                oplog.log(this, 'user.register.sms', {}),
-            ]);
-            const [tid] = await token.add(
-                token.TYPE_SMS_VERIFICATION,
-                expireSeconds,
-                { phone, purpose: 'register' },
-            );
-            try {
-                await sendAliyunSmsCode(phone, tid);
-            } catch (e) {
-                await token.del(tid, token.TYPE_SMS_VERIFICATION);
-                throw e;
-            }
-            this.response.template = 'user_register.html';
-            this.response.body = {
-                mailEnabled: system.get('smtp.verify') && system.get('smtp.user'),
-                phoneEnabled: true,
-                phone,
-                phoneSent: true,
-                expireSeconds,
-            };
-            return;
-        }
-        await this.limitRate('verify_sms', 60, 5, phone);
-        const [doc] = await token.getMulti(token.TYPE_SMS_VERIFICATION, { phone, purpose: 'register' })
-            .sort({ updateAt: -1 })
-            .limit(1)
-            .toArray();
-        if (!doc) {
-            throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
-        }
-        const verified = await verifyAliyunSmsCode(phone, smsCode.trim(), doc._id);
-        if (!verified) {
-            throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
-        }
-        await token.del(doc._id, token.TYPE_SMS_VERIFICATION);
-        const [registrationCode] = await token.add(
-            token.TYPE_REGISTRATION,
-            system.get('session.unsaved_expire_seconds'),
-            {
-                redirect: this.domain.registerRedirect,
-                identity: {
-                    provider: 'phone',
-                    platform: 'phone',
-                    id: phone,
-                },
-                set: {
-                    phone,
-                    phoneVerified: true,
-                },
-            },
-        );
-        this.response.redirect = this.url('user_register_with_code', { code: registrationCode });
-    }
-
-    @post('mail', Types.String, true)
-    @post('phone', Types.String, true)
-    @post('smsCode', Types.String, true)
-    @post('mode', Types.Range(['mail', 'phone']), true)
-    async post({ }, mail = '', phone = '', smsCode = '', mode = 'mail') {
-        if (mode === 'phone' || phone) return await this.sendSmsRegister(phone, smsCode);
-        if (!Types.Email[1](mail)) throw new ValidationError('mail');
-        return await this.sendMailRegister(Types.Email[0](mail));
+    @post('mail', Types.Email)
+    async post({ }, mail: string) {
+        return await this.sendMailRegister(mail);
     }
 }
 
@@ -402,6 +326,9 @@ class UserRegisterWithCodeHandler extends Handler {
         if (provider.lockUsername) uname = this.tdoc.identity.username;
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
         if (password !== verify) throw new VerifyPasswordError();
+        const ids = Array.isArray(this.tdoc.identity.id) ? this.tdoc.identity.id : [this.tdoc.identity.id];
+        const existing = await Promise.all(ids.map((id) => this.ctx.oauth.get(this.tdoc.identity.platform, id)));
+        if (existing.some((uid) => uid)) throw new UserAlreadyExistError(ids[0]);
         const randomEmail = `${randomstring(12)}@invalid.local`; // some random email to remove in the future
         const mail = this.tdoc.mail || randomEmail;
         const uid = await user.create(mail, uname, password, undefined, this.request.ip);
@@ -417,7 +344,7 @@ class UserRegisterWithCodeHandler extends Handler {
         if (this.session.viewLang) $set.viewLang = this.session.viewLang;
         if (Object.keys($set).length) await user.setById(uid, $set);
         if (Object.keys(this.tdoc.setInDomain || {}).length) await domain.setUserInDomain(domainId, uid, this.tdoc.setInDomain);
-        await this.ctx.oauth.set(this.tdoc.identity.platform, this.tdoc.identity.id, uid);
+        await Promise.all(ids.map((id) => this.ctx.oauth.set(this.tdoc.identity.platform, id, uid)));
         await successfulAuth.call(this, await user.getById(domainId, uid));
         this.response.redirect = this.tdoc.redirect || this.url('home_settings', { category: 'preference' });
     }
@@ -428,10 +355,7 @@ class UserLostPassHandler extends Handler {
 
     async get() {
         this.response.template = 'user_lostpass.html';
-        this.response.body = {
-            mailEnabled: system.get('smtp.user'),
-            phoneEnabled: isAliyunSmsEnabled(),
-        };
+        this.response.body = { mailEnabled: !!system.get('smtp.user') };
     }
 
     async sendMailLostPass(mail: string) {
@@ -460,64 +384,9 @@ class UserLostPassHandler extends Handler {
         this.response.template = 'user_lostpass_mail_sent.html';
     }
 
-    async sendPhoneLostPass(phone: string, smsCode = '') {
-        if (!isAliyunSmsEnabled()) throw new SystemError('SMS registration is not enabled');
-        phone = normalizePhone(phone);
-        const uid = await this.ctx.oauth.get('phone', phone);
-        if (!uid) throw new UserNotFoundError(maskPhone(phone));
-        const expireSeconds = system.get('sms.aliyun.expireSeconds') || 300;
-        if (!smsCode) {
-            await Promise.all([
-                this.limitRate('send_sms_lostpass', 60, 1, phone),
-                this.limitRate('send_sms_lostpass', 3600, 30),
-                oplog.log(this, 'user.lostpass.sms', {}),
-            ]);
-            const [tid] = await token.add(
-                token.TYPE_SMS_VERIFICATION,
-                expireSeconds,
-                { phone, uid, purpose: 'lostpass' },
-            );
-            try {
-                await sendAliyunSmsCode(phone, tid);
-            } catch (e) {
-                await token.del(tid, token.TYPE_SMS_VERIFICATION);
-                throw e;
-            }
-            this.response.template = 'user_lostpass.html';
-            this.response.body = {
-                mailEnabled: system.get('smtp.user'),
-                phoneEnabled: true,
-                phone,
-                phoneSent: true,
-                expireSeconds,
-            };
-            return;
-        }
-        await this.limitRate('verify_sms_lostpass', 60, 5, phone);
-        const [doc] = await token.getMulti(token.TYPE_SMS_VERIFICATION, { phone, purpose: 'lostpass' })
-            .sort({ updateAt: -1 })
-            .limit(1)
-            .toArray();
-        if (!doc) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
-        const verified = await verifyAliyunSmsCode(phone, smsCode.trim(), doc._id);
-        if (!verified) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_SMS_VERIFICATION]);
-        await token.del(doc._id, token.TYPE_SMS_VERIFICATION);
-        const [tid] = await token.add(
-            token.TYPE_LOSTPASS,
-            system.get('session.unsaved_expire_seconds'),
-            { uid: doc.uid },
-        );
-        this.response.redirect = this.url('user_lostpass_with_code', { code: tid });
-    }
-
-    @param('mail', Types.String, true)
-    @param('phone', Types.String, true)
-    @param('smsCode', Types.String, true)
-    @param('mode', Types.Range(['mail', 'phone']), true)
-    async post(domainId: string, mail = '', phone = '', smsCode = '', mode = 'mail') {
-        if (mode === 'phone' || phone) return await this.sendPhoneLostPass(phone, smsCode);
-        if (!Types.Email[1](mail)) throw new ValidationError('mail');
-        return await this.sendMailLostPass(Types.Email[0](mail));
+    @param('mail', Types.Email)
+    async post(domainId: string, mail: string) {
+        return await this.sendMailLostPass(mail);
     }
 }
 
@@ -791,17 +660,6 @@ export async function apply(ctx: Context) {
     ctx.oauth.provide('mail', {
         text: 'Mail',
         name: 'mail',
-        hidden: true,
-        async get() {
-            throw new NotFoundError();
-        },
-        async callback() {
-            throw new NotFoundError();
-        },
-    });
-    ctx.oauth.provide('phone', {
-        text: 'Phone',
-        name: 'phone',
         hidden: true,
         async get() {
             throw new NotFoundError();
