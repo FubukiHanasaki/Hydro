@@ -8,7 +8,7 @@ import * as supertest from 'supertest';
 
 const Root = {
     username: 'root',
-    password: '123456',
+    password: 'rootPass1',
     creditionals: null,
 };
 
@@ -85,6 +85,9 @@ describe('App', () => {
             const currentYear = new Date().getFullYear();
             assert.doesNotMatch(phoneOnly.text, /name="mail"/);
             assert.match(phoneOnly.text, /name="phone"/);
+            assert.match(phoneOnly.text, /data-phone-auth-sms-form/);
+            assert.match(phoneOnly.text, /data-phone-auth-resend-sms/);
+            assert.match(phoneOnly.text, /Username can contain only Chinese characters|用户名仅可使用汉字/);
             assert.match(phoneOnly.text, /name="birthYear" class="select" style="color:#111;background-color:#fff;"/);
             assert.match(phoneOnly.text, /<option value="" disabled hidden selected>/);
             assert.match(phoneOnly.text, new RegExp(`<option value="${currentYear - 30}"`));
@@ -96,10 +99,33 @@ describe('App', () => {
                 .send({
                     mode: 'phone',
                     phone: '13700137002',
+                    uname: 'missingyear',
+                    password: Root.password,
+                    verifyPassword: Root.password,
                     realName: 'Missing Year',
                     birthMonth: '1',
                     school: 'Missing School',
                     grade: 'junior1',
+                })
+                .expect(403);
+            await agent.post('/register')
+                .send({
+                    mode: 'phone',
+                    phone: '13700137003',
+                    uname: 'weakphone',
+                    password: '12345678',
+                    verifyPassword: '12345678',
+                    ...PhoneUserProfile,
+                })
+                .expect(403);
+            await agent.post('/register')
+                .send({
+                    mode: 'phone',
+                    phone: '13700137004',
+                    uname: 'bad.name',
+                    password: Root.password,
+                    verifyPassword: Root.password,
+                    ...PhoneUserProfile,
                 })
                 .expect(403);
 
@@ -109,7 +135,14 @@ describe('App', () => {
             assert.match(mailOnly.text, /name="mail"/);
             assert.doesNotMatch(mailOnly.text, /name="phone"/);
             await agent.post('/register')
-                .send({ mode: 'phone', phone: '13700137001', ...PhoneUserProfile })
+                .send({
+                    mode: 'phone',
+                    phone: '13700137001',
+                    uname: 'disabledphone',
+                    password: Root.password,
+                    verifyPassword: Root.password,
+                    ...PhoneUserProfile,
+                })
                 .expect(403);
 
             await SystemModel.set('phone-auth.allowMailRegistration', false);
@@ -129,6 +162,9 @@ describe('App', () => {
             .expect(302)
             .then((res) => res.headers.location);
         await agent.post(redirect)
+            .send({ uname: Root.username, password: '12345678', verifyPassword: '12345678' })
+            .expect(403);
+        await agent.post(redirect)
             .send({ uname: Root.username, password: Root.password, verifyPassword: Root.password })
             .expect(302);
     });
@@ -147,10 +183,15 @@ describe('App', () => {
 
     it('Phone binding for existing users records private real name', async () => {
         const phone = '13900139000';
+        const bindPage = await agent.get('/home/phone').expect(200);
+        assert.match(bindPage.text, /data-phone-auth-sms-form/);
+        assert.match(bindPage.text, /data-phone-auth-resend-sms/);
         const sendRes = await agent.post('/home/phone')
+            .set('Accept', 'application/json')
             .send({ phone, ...RootProfile })
             .expect(200);
-        assert.match(sendRes.text, /name="smsCode"/);
+        assert.equal(sendRes.body.phoneSent, true);
+        assert.equal(sendRes.body.expireSeconds, 300);
         await agent.post('/home/phone')
             .send({
                 phone, ...RootProfile, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
@@ -192,25 +233,57 @@ describe('App', () => {
     it('Phone registration, login, TFA probe, and lost password', async () => {
         const phoneAgent = supertest.agent(require('@hydrooj/framework').httpServer);
         const phone = '13800138000';
-        const password = '123456';
-        await phoneAgent.post('/register')
-            .send({ mode: 'phone', phone, ...PhoneUserProfile })
+        const password = 'phonePass1';
+        const registerBody = {
+            mode: 'phone',
+            phone,
+            uname: 'phoneuser',
+            password,
+            verifyPassword: password,
+            ...PhoneUserProfile,
+        };
+        const available = await phoneAgent.get('/phone-auth/register/check')
+            .query({ uname: registerBody.uname, phone })
             .expect(200);
-        const redirect = await phoneAgent.post('/register')
+        assert.equal(available.body.username.valid, true);
+        assert.equal(available.body.username.available, true);
+        assert.equal(available.body.phone.valid, true);
+        assert.equal(available.body.phone.available, true);
+        const invalid = await phoneAgent.get('/phone-auth/register/check')
+            .query({ uname: 'bad.name', phone: 'abc' })
+            .expect(200);
+        assert.equal(invalid.body.username.valid, false);
+        assert.equal(invalid.body.phone.valid, false);
+        const registerSend = await phoneAgent.post('/register')
+            .set('Accept', 'application/json')
+            .send(registerBody)
+            .expect(200);
+        assert.equal(registerSend.body.phoneSent, true);
+        assert.equal(registerSend.body.expireSeconds, 300);
+        await phoneAgent.post('/register')
             .send({
-                mode: 'phone', phone, ...PhoneUserProfile, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
+                ...registerBody,
+                smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
             })
             .expect(302)
-            .then((res) => res.headers.location);
-        await phoneAgent.post('/register')
+            .expect('Location', /^\/home\/settings/);
+        const duplicateAgent = supertest.agent(require('@hydrooj/framework').httpServer);
+        const duplicated = await duplicateAgent.get('/phone-auth/register/check')
+            .query({ uname: registerBody.uname, phone })
+            .expect(200);
+        assert.equal(duplicated.body.username.valid, true);
+        assert.equal(duplicated.body.username.available, false);
+        assert.equal(duplicated.body.phone.valid, true);
+        assert.equal(duplicated.body.phone.available, false);
+        await duplicateAgent.post('/register')
             .send({
-                mode: 'phone', phone, ...PhoneUserProfile, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
+                ...registerBody,
+                uname: 'phoneuser2',
+                smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE,
             })
             .expect(403);
-        await phoneAgent.post(redirect)
-            .send({ uname: 'phoneuser', password, verifyPassword: password })
-            .expect(302);
-        await phoneAgent.post('/login')
+        const loginAgent = supertest.agent(require('@hydrooj/framework').httpServer);
+        await loginAgent.post('/login')
             .send({ uname: phone, password })
             .expect(302);
         const UserModel = require('../packages/hydrooj/src/model/user').default;
@@ -221,22 +294,32 @@ describe('App', () => {
         assert.equal(udoc.birthMonth, PhoneUserProfile.birthMonth);
         assert.equal(udoc.school, PhoneUserProfile.school);
         assert.equal(udoc.grade, PhoneUserProfile.grade);
-        const ownProfile = await phoneAgent.get(`/user/${udoc._id}`).expect(200);
+        const ownProfile = await loginAgent.get(`/user/${udoc._id}`).expect(200);
         assert.match(ownProfile.text, new RegExp(PhoneUserProfile.realName));
         const otherProfile = await agent.get(`/user/${udoc._id}`).expect(200);
         assert.doesNotMatch(otherProfile.text, new RegExp(PhoneUserProfile.realName));
         await UserModel.setById(udoc._id, { tfa: true });
-        await phoneAgent.get(`/user/tfa?q=${phone}`)
+        await loginAgent.get(`/user/tfa?q=${phone}`)
             .expect(200)
             .expect({ tfa: true, authn: false });
-        await phoneAgent.post('/lostpass')
+        const lostpassAgent = supertest.agent(require('@hydrooj/framework').httpServer);
+        const lostpassSend = await lostpassAgent.post('/lostpass')
+            .set('Accept', 'application/json')
             .send({ mode: 'phone', phone })
             .expect(200);
-        const lostpassRedirect = await phoneAgent.post('/lostpass')
+        assert.equal(lostpassSend.body.phoneSent, true);
+        assert.equal(lostpassSend.body.expireSeconds, 300);
+        const lostpassRedirect = await lostpassAgent.post('/lostpass')
             .send({ mode: 'phone', phone, smsCode: process.env.HYDRO_SMS_ALIYUN_TEST_CODE })
             .expect(302)
             .then((res) => res.headers.location);
         assert.match(lostpassRedirect, /^\/lostpass\//);
+        await lostpassAgent.post(lostpassRedirect)
+            .send({ password: '12345678', verifyPassword: '12345678' })
+            .expect(403);
+        await lostpassAgent.post(lostpassRedirect)
+            .send({ password: 'phoneReset1', verifyPassword: 'phoneReset1' })
+            .expect(302);
     });
 
     it('Contest form exposes phone requirement option', async () => {
