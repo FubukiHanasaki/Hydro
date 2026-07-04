@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import {
-    ContestModel, Context, CreateError, Handler, InvalidTokenError, NotFoundError,
+    ContestModel, Context, CreateError, ForbiddenError, Handler, InvalidTokenError, NotFoundError,
     OplogModel, PRIV, Schema, SettingModel, SystemError, SystemModel, TokenModel,
     UserAlreadyExistError, UserFacingError, UserModel, UserNotFoundError,
     ValidationError,
@@ -11,6 +11,8 @@ export const inject = ['oauth'];
 
 export const Config = Schema.object({
     enabled: Schema.boolean().default(false).description('Enable phone authentication'),
+    allowMailRegistration: Schema.boolean().default(true).description('Allow email registration'),
+    allowPhoneRegistration: Schema.boolean().default(true).description('Allow phone registration'),
     accessKeyId: Schema.string().default('').description('Aliyun AccessKey ID').role('password'),
     accessKeySecret: Schema.string().default('').description('Aliyun AccessKey Secret').role('password'),
     endpoint: Schema.string().default('dypnsapi.aliyuncs.com').description('Aliyun SMS endpoint'),
@@ -29,6 +31,11 @@ const SMS_TOKEN_TEXT = 'SMS Verification';
 const PHONE_REGISTRATION_TEXT = 'Phone Registration';
 
 const SendSmsError = CreateError('SendSmsError', UserFacingError, 'Failed to send SMS to {0}. ({1})', 500);
+const RegistrationMethodDisabledError = CreateError(
+    'RegistrationMethodDisabledError',
+    ForbiddenError,
+    '{0} registration is disabled.',
+);
 
 const GRADE_OPTIONS = {
     primary1: 'Primary Grade 1',
@@ -74,6 +81,20 @@ function getConfig(config: PhoneAuthConfig) {
 
 function isAliyunSmsEnabled(config: PhoneAuthConfig) {
     return getConfig(config).enabled;
+}
+
+function settingBool(key: string, fallback: boolean) {
+    const value = SystemModel.get(key);
+    return value === undefined ? fallback : !!value;
+}
+
+function isMailRegistrationEnabled(config: PhoneAuthConfig) {
+    return settingBool('phone-auth.allowMailRegistration', config.allowMailRegistration !== false);
+}
+
+function isPhoneRegistrationEnabled(config: PhoneAuthConfig) {
+    return settingBool('phone-auth.allowPhoneRegistration', config.allowPhoneRegistration !== false)
+        && isAliyunSmsEnabled(config);
 }
 
 function normalizePhone(input: string) {
@@ -336,7 +357,7 @@ async function reservePhoneRegistration(phone: string) {
 }
 
 async function sendSmsRegister(that: Handler, config: PhoneAuthConfig, phoneInput: string, smsCode = '', profileInput: Record<string, any> = {}) {
-    if (!isAliyunSmsEnabled(config)) throw new SystemError('SMS registration is not enabled');
+    if (!isPhoneRegistrationEnabled(config)) throw new RegistrationMethodDisabledError('Phone');
     const phone = normalizePhone(phoneInput);
     if (await oauthService(that.ctx).get('phone', phone)) throw new UserAlreadyExistError(maskPhone(phone));
     if (await TokenModel.get(registrationReservationId(phone), TYPE_PHONE_REGISTRATION)) {
@@ -359,7 +380,7 @@ async function sendSmsRegister(that: Handler, config: PhoneAuthConfig, phoneInpu
         }
         that.response.template = 'user_register.html';
         setBody(that, {
-            mailEnabled: true,
+            mailEnabled: isMailRegistrationEnabled(config),
             phoneEnabled: true,
             phone,
             phoneSent: true,
@@ -576,6 +597,12 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
     activeConfig = config;
 
     ctx.inject(['setting'], (c) => {
+        c.setting.SystemSetting(Schema.object({
+            'phone-auth': Schema.object({
+                allowMailRegistration: Schema.boolean().default(true).description('Allow email registration'),
+                allowPhoneRegistration: Schema.boolean().default(true).description('Allow phone registration'),
+            }).extra('family', 'setting_sms'),
+        }));
         c.setting.AccountSetting(SettingModel.Setting(
             'setting_info',
             'realName',
@@ -637,19 +664,34 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
 
     ctx.on('handler/after/UserRegister#get', (that) => {
         setBody(that, {
-            mailEnabled: true,
-            phoneEnabled: isAliyunSmsEnabled(config),
+            mailEnabled: isMailRegistrationEnabled(config),
+            phoneEnabled: isPhoneRegistrationEnabled(config),
             ...profileFormBody(),
         });
     });
 
     ctx.on('handler/before/UserRegister#post', async (that) => {
         const {
-            mode, phone, smsCode,
+            mail, mode, phone, smsCode,
         } = that.request.body || {};
+        if ((mode === 'mail' || mail) && !isMailRegistrationEnabled(config)) {
+            throw new RegistrationMethodDisabledError('Email');
+        }
+        if ((mode === 'phone' || phone) && !isPhoneRegistrationEnabled(config)) {
+            throw new RegistrationMethodDisabledError('Phone');
+        }
         if (mode !== 'phone' && !phone) return;
         await sendSmsRegister(that, config, phone, smsCode || '', that.request.body || {});
         return 'cleanup';
+    });
+
+    ctx.on('handler/before/UserRegisterWithCode#post', async (that) => {
+        if (that.tdoc?.identity?.provider === 'mail' && !isMailRegistrationEnabled(config)) {
+            throw new RegistrationMethodDisabledError('Email');
+        }
+        if (that.tdoc?.identity?.provider === 'phone' && !isPhoneRegistrationEnabled(config)) {
+            throw new RegistrationMethodDisabledError('Phone');
+        }
     });
 
     ctx.on('handler/before/UserRegisterWithCode#post', async (that) => {

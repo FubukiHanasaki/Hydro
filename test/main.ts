@@ -74,6 +74,40 @@ describe('App', () => {
         }
     });
 
+    it('Registration methods follow phone-auth switches', async () => {
+        const SystemModel = require('../packages/hydrooj/src/model/system').default;
+        const enabled = process.env.HYDRO_SMS_ALIYUN_ENABLED;
+        process.env.HYDRO_SMS_ALIYUN_ENABLED = '1';
+        try {
+            await SystemModel.set('phone-auth.allowMailRegistration', false);
+            await SystemModel.set('phone-auth.allowPhoneRegistration', true);
+            const phoneOnly = await agent.get('/register').expect(200);
+            assert.doesNotMatch(phoneOnly.text, /name="mail"/);
+            assert.match(phoneOnly.text, /name="phone"/);
+            await agent.post('/register')
+                .send({ mode: 'mail', mail: 'blocked-mail@example.com' })
+                .expect(403);
+
+            await SystemModel.set('phone-auth.allowMailRegistration', true);
+            await SystemModel.set('phone-auth.allowPhoneRegistration', false);
+            const mailOnly = await agent.get('/register').expect(200);
+            assert.match(mailOnly.text, /name="mail"/);
+            assert.doesNotMatch(mailOnly.text, /name="phone"/);
+            await agent.post('/register')
+                .send({ mode: 'phone', phone: '13700137001', ...PhoneUserProfile })
+                .expect(403);
+
+            await SystemModel.set('phone-auth.allowMailRegistration', false);
+            const disabled = await agent.get('/register').expect(200);
+            assert.match(disabled.text, /Registration is currently disabled|注册当前已关闭/);
+        } finally {
+            await SystemModel.set('phone-auth.allowMailRegistration', true);
+            await SystemModel.set('phone-auth.allowPhoneRegistration', true);
+            if (enabled === undefined) delete process.env.HYDRO_SMS_ALIYUN_ENABLED;
+            else process.env.HYDRO_SMS_ALIYUN_ENABLED = enabled;
+        }
+    });
+
     it('Create User', async () => {
         const redirect = await agent.post('/register')
             .send({ mail: 'test@example.com' })

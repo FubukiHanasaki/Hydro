@@ -1,5 +1,10 @@
 Email Registration: 信箱註冊
 Phone Registration: 手機號註冊
+Allow email registration: 允許信箱註冊
+Allow phone registration: 允許手機號註冊
+Email registration is disabled.: 信箱註冊已關閉。
+Phone registration is disabled.: 手機號註冊已關閉。
+Registration is currently disabled.: 註冊目前已關閉。
 Phone: 手機號
 Send SMS Code: 傳送簡訊驗證碼
 SMS Code: 簡訊驗證碼

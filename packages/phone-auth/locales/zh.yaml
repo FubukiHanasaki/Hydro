@@ -1,5 +1,10 @@
 Email Registration: 邮箱注册
 Phone Registration: 手机号注册
+Allow email registration: 允许邮箱注册
+Allow phone registration: 允许手机号注册
+Email registration is disabled.: 邮箱注册已关闭。
+Phone registration is disabled.: 手机号注册已关闭。
+Registration is currently disabled.: 注册当前已关闭。
 Phone: 手机号
 Send SMS Code: 发送短信验证码
 SMS Code: 短信验证码
