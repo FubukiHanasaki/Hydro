@@ -53,6 +53,8 @@ const GRADE_OPTIONS = {
     other: 'Other',
 };
 
+const BIRTH_YEAR_LOOKBACK = 30;
+
 type ProfileFields = {
     realName: string;
     birthYear: string;
@@ -118,7 +120,7 @@ function normalizeRealName(input: string) {
 
 function birthYearOptions() {
     const current = new Date().getFullYear();
-    return Object.fromEntries(Array.from({ length: 101 }, (_, i) => {
+    return Object.fromEntries(Array.from({ length: BIRTH_YEAR_LOOKBACK + 1 }, (_, i) => {
         const year = (current - i).toString();
         return [year, year];
     }));
@@ -141,7 +143,7 @@ function normalizeBirthYear(input: string) {
     const value = `${input || ''}`.trim();
     const year = +value;
     const current = new Date().getFullYear();
-    if (!Number.isInteger(year) || year < current - 100 || year > current) throw new ValidationError('birthYear');
+    if (!Number.isInteger(year) || year < current - BIRTH_YEAR_LOOKBACK || year > current) throw new ValidationError('birthYear');
     return year.toString();
 }
 
@@ -171,10 +173,10 @@ function normalizeProfile(input: Record<string, any>): ProfileFields {
 function getProfileFromUser(udoc: any = {}) {
     return {
         realName: udoc.realName || '',
-        birthYear: udoc.birthYear || '',
-        birthMonth: udoc.birthMonth || '',
+        birthYear: optionValue(udoc.birthYear, birthYearOptions()),
+        birthMonth: optionValue(udoc.birthMonth, birthMonthOptions()),
         school: udoc.school || '',
-        grade: udoc.grade || '',
+        grade: optionValue(udoc.grade, GRADE_OPTIONS),
         phone: udoc.phone || '',
     };
 }
@@ -192,16 +194,21 @@ function profileFormBody(profile: Record<string, any> = {}) {
     return {
         profile: {
             realName: profile.realName || '',
-            birthYear: profile.birthYear || '',
-            birthMonth: profile.birthMonth || '',
+            birthYear: optionValue(profile.birthYear, birthYearOptions()),
+            birthMonth: optionValue(profile.birthMonth, birthMonthOptions()),
             school: profile.school || '',
-            grade: profile.grade || '',
+            grade: optionValue(profile.grade, GRADE_OPTIONS),
             phone: profile.phone || '',
         },
         birthYears: birthYearOptions(),
         birthMonths: birthMonthOptions(),
         gradeOptions: GRADE_OPTIONS,
     };
+}
+
+function optionValue(value: any, options: Record<string, any>) {
+    const key = `${value || ''}`;
+    return Object.hasOwn(options, key) ? key : '';
 }
 
 function assertOk(body: any, phone: string) {

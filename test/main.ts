@@ -82,10 +82,24 @@ describe('App', () => {
             await SystemModel.set('phone-auth.allowMailRegistration', false);
             await SystemModel.set('phone-auth.allowPhoneRegistration', true);
             const phoneOnly = await agent.get('/register').expect(200);
+            const currentYear = new Date().getFullYear();
             assert.doesNotMatch(phoneOnly.text, /name="mail"/);
             assert.match(phoneOnly.text, /name="phone"/);
+            assert.match(phoneOnly.text, /<option value="" disabled hidden selected>/);
+            assert.match(phoneOnly.text, new RegExp(`<option value="${currentYear - 30}"`));
+            assert.doesNotMatch(phoneOnly.text, new RegExp(`<option value="${currentYear - 31}"`));
             await agent.post('/register')
                 .send({ mode: 'mail', mail: 'blocked-mail@example.com' })
+                .expect(403);
+            await agent.post('/register')
+                .send({
+                    mode: 'phone',
+                    phone: '13700137002',
+                    realName: 'Missing Year',
+                    birthMonth: '1',
+                    school: 'Missing School',
+                    grade: 'junior1',
+                })
                 .expect(403);
 
             await SystemModel.set('phone-auth.allowMailRegistration', true);
