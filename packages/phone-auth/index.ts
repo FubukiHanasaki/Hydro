@@ -29,18 +29,19 @@ const TYPE_SMS_VERIFICATION = 1002;
 const TYPE_PHONE_REGISTRATION = 1003;
 const SMS_TOKEN_TEXT = 'SMS Verification';
 
-const SendSmsError = CreateError('SendSmsError', UserFacingError, 'Failed to send SMS to {0}. ({1})', 500);
-const RegistrationMethodDisabledError = CreateError(
+const createHydroError = CreateError;
+const SendSmsError = createHydroError('SendSmsError', UserFacingError, 'Failed to send SMS to {0}. ({1})', 500);
+const RegistrationMethodDisabledError = createHydroError(
     'RegistrationMethodDisabledError',
     ForbiddenError,
     '{0} registration is disabled.',
 );
-const WeakPasswordError = CreateError(
+const WeakPasswordError = createHydroError(
     'WeakPasswordError',
     ForbiddenError,
     'Password must be at least 8 characters and include both letters and numbers.',
 );
-const PhoneAlreadyRegisteredError = CreateError(
+const PhoneAlreadyRegisteredError = createHydroError(
     'PhoneAlreadyRegisteredError',
     ForbiddenError,
     'Phone number {0} is already registered.',
@@ -66,16 +67,16 @@ const BIRTH_YEAR_LOOKBACK = 30;
 const USERNAME_ALLOWED_RE = /^[A-Za-z0-9_\-\u4E00-\u9FA5]+$/;
 const USERNAME_CHINESE_RE = /^[\u4E00-\u9FA5]+$/;
 
-type ProfileFields = {
+interface ProfileFields {
     realName: string;
     birthYear: string;
     birthMonth: string;
     school: string;
     grade: string;
-};
+}
 
-function env(name: string) {
-    return process.env[`HYDRO_SMS_ALIYUN_${name}`] || '';
+function env(key: string) {
+    return process.env[`HYDRO_SMS_ALIYUN_${key}`] || '';
 }
 
 function getConfig(config: PhoneAuthConfig) {
@@ -110,8 +111,8 @@ function isPhoneRegistrationEnabled(config: PhoneAuthConfig) {
         && isAliyunSmsEnabled(config);
 }
 
-function normalizePhone(input: string) {
-    const value = input.trim().replace(/[\s-]/g, '');
+function normalizePhone(input: any) {
+    const value = `${input || ''}`.trim().replace(/[\s-]/g, '');
     const mainland = value.match(/^(?:\+?86|0086)?(1[3-9]\d{9})$/);
     if (mainland) return mainland[1];
     if (/^\+?[1-9]\d{5,19}$/.test(value)) return value.replace(/^\+/, '');
@@ -208,6 +209,11 @@ function normalizeProfile(input: Record<string, any>): ProfileFields {
     };
 }
 
+function optionValue(value: any, options: Record<string, any>) {
+    const key = `${value || ''}`;
+    return Object.hasOwn(options, key) ? key : '';
+}
+
 function getProfileFromUser(udoc: any = {}) {
     return {
         realName: udoc.realName || '',
@@ -244,11 +250,6 @@ function profileFormBody(profile: Record<string, any> = {}) {
     };
 }
 
-function optionValue(value: any, options: Record<string, any>) {
-    const key = `${value || ''}`;
-    return Object.hasOwn(options, key) ? key : '';
-}
-
 function assertOk(body: any, phone: string) {
     if (body?.success === true || body?.Success === true) return body;
     if (body?.code === 'OK' || body?.Code === 'OK') return body;
@@ -263,7 +264,8 @@ async function createAliyunDypnsClient(config: PhoneAuthConfig) {
     if (!accessKeyId || !accessKeySecret) throw new SystemError('Aliyun SMS is not configured');
     const Dypnsapi20170525 = require('@alicloud/dypnsapi20170525');
     const OpenApi = require('@alicloud/openapi-client');
-    return new Dypnsapi20170525.default(new OpenApi.Config({
+    const DypnsClient = Dypnsapi20170525.default;
+    return new DypnsClient(new OpenApi.Config({
         accessKeyId,
         accessKeySecret,
         endpoint: endpoint || 'dypnsapi.aliyuncs.com',
@@ -778,7 +780,7 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
         if ((mode === 'phone' || phone) && !isPhoneRegistrationEnabled(config)) {
             throw new RegistrationMethodDisabledError('Phone');
         }
-        if (mode !== 'phone' && !phone) return;
+        if (mode !== 'phone' && !phone) return undefined;
         await sendSmsRegister(that, config, phone, smsCode || '', that.request.body || {});
         return 'cleanup';
     });
@@ -804,7 +806,7 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
 
     ctx.on('handler/before/UserLostPass#post', async (that) => {
         const { mode, phone, smsCode } = that.request.body || {};
-        if (mode !== 'phone' && !phone) return;
+        if (mode !== 'phone' && !phone) return undefined;
         await sendPhoneLostPass(that, config, phone, smsCode || '');
         return 'cleanup';
     });
@@ -886,9 +888,9 @@ export function apply(ctx: Context, config: PhoneAuthConfig) {
     });
 
     ctx.on('handler/before-operation/ContestDetail', async (that) => {
-        if (that.request.body?.operation !== 'attend') return;
-        if (!(that.tdoc as any)?.requirePhone || that.user._id <= 0) return;
-        if (await hasCompleteRequiredProfile(that.ctx, that.user._id, that.user)) return;
+        if (that.request.body?.operation !== 'attend') return undefined;
+        if (!(that.tdoc as any)?.requirePhone || that.user._id <= 0) return undefined;
+        if (await hasCompleteRequiredProfile(that.ctx, that.user._id, that.user)) return undefined;
         that.response.redirect = that.url('phone_auth_bind', {
             query: {
                 redirect: that.url('contest_detail', { tid: that.tdoc.docId }),

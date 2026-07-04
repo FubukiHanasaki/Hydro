@@ -98,6 +98,18 @@ describe('App', () => {
             await agent.post('/register')
                 .send({
                     mode: 'phone',
+                    uname: 'missingphone',
+                    password: Root.password,
+                    verifyPassword: Root.password,
+                    ...PhoneUserProfile,
+                })
+                .expect(403);
+            await agent.post('/lostpass')
+                .send({ mode: 'phone' })
+                .expect(403);
+            await agent.post('/register')
+                .send({
+                    mode: 'phone',
                     phone: '13700137002',
                     uname: 'missingyear',
                     password: Root.password,
@@ -186,6 +198,9 @@ describe('App', () => {
         const bindPage = await agent.get('/home/phone').expect(200);
         assert.match(bindPage.text, /data-phone-auth-sms-form/);
         assert.match(bindPage.text, /data-phone-auth-resend-sms/);
+        await agent.post('/home/phone')
+            .send({ ...RootProfile })
+            .expect(403);
         const sendRes = await agent.post('/home/phone')
             .set('Accept', 'application/json')
             .send({ phone, ...RootProfile })

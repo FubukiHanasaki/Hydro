@@ -1,5 +1,5 @@
 import {
-  $, Notification, i18n, request,
+  $, i18n, Notification, request,
 } from '@hydrooj/ui-default';
 
 const DEFAULT_EXPIRE_SECONDS = 300;
@@ -96,7 +96,7 @@ function hasStrongPassword(password: string) {
 
 function hasValidPhone(phone: string) {
   const value = phone.trim().replace(/[\s-]/g, '');
-  return /^(?:\+?86|0086)?(1[3-9]\d{9})$/.test(value) || /^\+?[1-9]\d{5,19}$/.test(value);
+  return /^(?:\+?86|0086)?1[3-9]\d{9}$/.test(value) || /^\+?[1-9]\d{5,19}$/.test(value);
 }
 
 function hasValidUsername(username: string) {
@@ -108,7 +108,11 @@ function hasValidUsername(username: string) {
 }
 
 function usernameRuleMessage() {
-  return 'Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-). Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed. Each Chinese character counts as one character.';
+  return [
+    'Username can contain only Chinese characters, letters, numbers, underscores (_), and hyphens (-).',
+    'Use 3 to 31 characters; if the username is only Chinese characters, 2 characters are allowed.',
+    'Each Chinese character counts as one character.',
+  ].join(' ');
 }
 
 function focusField($form: JQuery, name?: string) {
@@ -191,8 +195,7 @@ function updatePasswordStatuses($form: JQuery, notify = false, force = false) {
       focusName ||= 'password';
       message ||= 'Please enter password.';
     }
-  }
-  else if (!hasStrongPassword(password)) {
+  } else if (!hasStrongPassword(password)) {
     ok = false;
     message ||= 'Password must be at least 8 characters and include both letters and numbers.';
     focusName ||= 'password';
@@ -200,14 +203,13 @@ function updatePasswordStatuses($form: JQuery, notify = false, force = false) {
   } else setFieldStatus($form, 'password', 'valid', i18n('Password strength is OK.'));
   if ($verify.length) {
     if (!verifyPassword) {
-      ok = ok && !force;
+      ok &&= !force;
       setFieldStatus($form, 'verifyPassword', force ? 'invalid' : 'idle', force ? i18n('Please repeat password.') : '');
       if (force) {
         focusName ||= 'verifyPassword';
         message ||= 'Please repeat password.';
       }
-    }
-    else if (password !== verifyPassword) {
+    } else if (password !== verifyPassword) {
       ok = false;
       message ||= "Passwords don't match.";
       focusName ||= 'verifyPassword';

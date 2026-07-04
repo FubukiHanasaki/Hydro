@@ -1,5 +1,5 @@
 import {
-  $, ActionDialog, NamedPage, Notification, addPage, i18n, request,
+  $, ActionDialog, addPage, i18n, NamedPage, Notification, request,
 } from '@hydrooj/ui-default';
 import { sendSmsCode, showSmsSentMessage, startSmsCountdown } from './sms';
 
@@ -12,14 +12,7 @@ const page = new NamedPage('contest_detail', () => {
   const $body = $marker.find('.phone-auth-contest-dialog > div');
   if (!$body.length || !profileUrl) return;
 
-  const dialog = new ActionDialog({
-    $body,
-    width: '520px',
-    onDispatch(action) {
-      if (action !== 'ok') return true;
-      return validateRequiredFields();
-    },
-  });
+  let dialog: ActionDialog;
 
   function findMissingRequired(includeSmsCode = true) {
     return dialog.$dom.find('input[required], select[required]').toArray()
@@ -37,6 +30,15 @@ const page = new NamedPage('contest_detail', () => {
     $(missing).focus();
     return false;
   }
+
+  dialog = new ActionDialog({
+    $body,
+    width: '520px',
+    onDispatch(action) {
+      if (action !== 'ok') return true;
+      return validateRequiredFields();
+    },
+  });
 
   const collectProfile = () => {
     const data: Record<string, any> = { operation: 'save' };
