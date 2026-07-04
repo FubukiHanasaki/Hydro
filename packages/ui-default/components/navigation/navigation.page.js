@@ -94,6 +94,11 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
   const $hamburger = $('.header__hamburger .hamburger');
   const PADDING = 200;
   const TOLERANCE = 70;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchCurrentX = 0;
+  let isSwiping = false;
+  let isScrolling = false;
 
   function isMobileLayout() {
     return $(document).width() <= responsiveCutoff.mobile;
@@ -124,12 +129,6 @@ const navigationPage = new AutoloadPage('navigationPage', () => {
   }
 
   // Touch swipe support
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchCurrentX = 0;
-  let isSwiping = false;
-  let isScrolling = false;
-
   panel.addEventListener('touchstart', (e) => {
     if (!isMobileLayout() || e.target.closest('[data-slideout-ignore]')) return;
     touchStartX = e.touches[0].clientX;

@@ -20,6 +20,7 @@ async function waitForOptionalService(ctx: Context, name: string) {
     if (!(ctx.reflect as any).get(name, false)) return;
     const start = Date.now();
     while (!(ctx as any).get(name, true) && Date.now() - start < 5000) {
+        // eslint-disable-next-line no-await-in-loop
         await new Promise((resolve) => setTimeout(resolve, 10));
     }
 }
